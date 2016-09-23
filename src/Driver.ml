@@ -27,6 +27,17 @@ let ( !  ) x     = Var x
 let ( $  ) n     = Const n
 let ( +  ) e1 e2 = Add (e1, e2)
 let ( *  ) e1 e2 = Mul (e1, e2)
+let ( -  ) e1 e2 = Sub (e1, e2)
+let ( /  ) e1 e2 = Div (e1, e2)
+let ( %  ) e1 e2 = Mod (e1, e2)
+let ( <  ) e1 e2 = Lt  (e1, e2)
+let ( >  ) e1 e2 = Gt  (e1, e2)
+let ( <= ) e1 e2 = Le  (e1, e2)
+let ( >= ) e1 e2 = Ge  (e1, e2)
+let ( == ) e1 e2 = Eq  (e1, e2)
+let ( != ) e1 e2 = Neq (e1, e2)
+let ( && ) e1 e2 = And (e1, e2)
+let ( || ) e1 e2 = Or  (e1, e2)
 
 let skip     = Skip
 let (:=) x e = Assign (x, e)
@@ -45,7 +56,16 @@ let p =
   read "x" |>
   read "y" |>
   ("z" := !"x" * !"x") |>
-  write (!"z" + !"y")
+  write (!"z" / !"y") |>
+  write (!"z" % !"y") |>
+  write (!"x" < !"y") |>
+  write (!"x" > !"y") |>
+  write (!"x" <= !"y") |>
+  write (!"x" >= !"y") |>
+  write (!"x" == !"y") |>
+  write (!"x" != !"y") |>
+  write (!"x" && !"y") |>
+  write (!"x" || !"y")
 
 (*
 let _ =
