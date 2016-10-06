@@ -2,9 +2,9 @@ type opnd = R of int | S of int | M of string | L of int
 
 let x86regs = [|
   "%eax"; 
-  "%ebx"; 
-  "%ecx"; 
   "%edx"; 
+  "%ecx"; 
+  "%ebx"; 
   "%esi"; 
   "%edi"
 |]
@@ -13,20 +13,32 @@ let num_of_regs = Array.length x86regs
 let word_size = 4
 
 let eax = R 0
-let ebx = R 1
+let edx = R 1
 let ecx = R 2
-let edx = R 3
+let ebx = R 3
 let esi = R 4
 let edi = R 5
 
-type instr =
-| X86Add  of opnd * opnd
-| X86Mul  of opnd * opnd
-| X86Mov  of opnd * opnd
-| X86Push of opnd
-| X86Pop  of opnd
-| X86Ret
-| X86Call of string
+type x86instr =
+  | X86Add  of opnd * opnd
+  | X86Mul  of opnd * opnd
+  | X86Sub  of opnd * opnd
+  | X86Div  of opnd * opnd
+  | X86Mod  of opnd * opnd
+  | X86Cmp  of opnd * opnd
+  | X86Mov  of opnd * opnd
+  | X86Push of opnd
+  | X86Pop  of opnd
+  | X86Cdq
+  | X86Setl
+  | X86Setle
+  | X86Setg
+  | X86Setge
+  | X86Sete
+  | X86Setne
+  | X86Movzbl
+  | X86Ret
+  | X86Call of string
 
 module S = Set.Make (String)
 
@@ -43,30 +55,50 @@ class x86env =
 
 let allocate env stack =
   match stack with
-  | []                              -> R 0
-  | (S n)::_                        -> env#allocate (n+1); S (n+1)
+  | []                              -> R 2
+  | (S n)::_                        -> env#allocate (n+2); S (n+1)
   | (R n)::_ when n < num_of_regs-1 -> R (n+1)
-  | _                               -> S 0
+  | _                               -> env#allocate (1); S 0
 
 module Show =
   struct
 
-    let opnd = function
-    | R i -> x86regs.(i)
-    | S i -> Printf.sprintf "-%d(%%ebp)" (i * word_size)
-    | M x -> x
-    | L i -> Printf.sprintf "$%d" i
+    let slot = function
+      | R i -> x86regs.(i)
+      | S i -> Printf.sprintf "-%d(%%ebp)" (i * word_size)
+      | M x -> x
+      | L i -> Printf.sprintf "$%d" i
 
     let instr = function
-    | X86Add (s1, s2) -> Printf.sprintf "\taddl\t%s,\t%s"  (opnd s1) (opnd s2)
-    | X86Mul (s1, s2) -> Printf.sprintf "\timull\t%s,\t%s" (opnd s1) (opnd s2)
-    | X86Mov (s1, s2) -> Printf.sprintf "\tmovl\t%s,\t%s"  (opnd s1) (opnd s2)
-    | X86Push s       -> Printf.sprintf "\tpushl\t%s"      (opnd s )
-    | X86Pop  s       -> Printf.sprintf "\tpopl\t%s"       (opnd s )
-    | X86Ret          -> "\tret"
-    | X86Call p       -> Printf.sprintf "\tcall\t%s" p
+      | X86Add  (s1, s2) -> Printf.sprintf "\taddl\t%s,\t%s"  (slot s1) (slot s2)
+      | X86Sub  (s1, s2) -> Printf.sprintf "\tsubl\t%s,\t%s"  (slot s1) (slot s2)
+      | X86Mul  (s1, s2) -> Printf.sprintf "\timull\t%s,\t%s" (slot s1) (slot s2)
+      | X86Div  (s1, s2) -> Printf.sprintf "\tidivl\t%s"      (slot s1)
+      | X86Mov  (s1, s2) -> Printf.sprintf "\tmovl\t%s,\t%s"  (slot s1) (slot s2)
+      | X86Cmp  (s1, s2) -> Printf.sprintf "\tcmp\t%s,\t%s"   (slot s1) (slot s2)
+      | X86Push  s       -> Printf.sprintf "\tpushl\t%s"      (slot s)
+      | X86Pop   s       -> Printf.sprintf "\tpopl\t%s"       (slot s)
+      | X86Call  p       -> Printf.sprintf "\tcall\t%s"        p
+      | X86Setl          -> "\tsetl\t%al"
+      | X86Setle         -> "\tsetle\t%al"
+      | X86Sete          -> "\tsete\t%al"
+      | X86Setne         -> "\tsetne\t%al"
+      | X86Setg          -> "\tsetg\t%al"
+      | X86Setge         -> "\tsetge\t%al"
+      | X86Movzbl        -> "\tmovzbl\t%al,\t%eax"
+      | X86Ret           -> "\tret"
+      | X86Cdq           -> "\tcdq"
 
   end
+
+let form_comparation x y comm =
+  [X86Push eax; X86Cmp (x, y); comm; X86Movzbl; X86Mov (eax, y); X86Pop eax]
+
+let swap_to_eax x y f =
+  match x, y with
+  | (M _, S _) -> [X86Push eax; X86Mov (x, eax)] @ (f eax y) @ [X86Pop eax]
+  | (S _, S _) -> [X86Push eax; X86Mov (x, eax)] @ (f eax y) @ [X86Pop eax]
+  | (_, _)     -> (f x y)
 
 module Compile =
   struct
@@ -78,41 +110,52 @@ module Compile =
 	match code with
 	| []       -> []
 	| i::code' ->
-	    let (stack', x86code) =
-              match i with
-              | S_READ   -> ([eax], [X86Call "read"])
-              | S_WRITE  -> ([], [X86Push (R 0); X86Call "write"; X86Pop (R 0)])
-              | S_PUSH n ->
-		  let s = allocate env stack in
-		  (s::stack, [X86Mov (L n, s)])
-              | S_LD x   ->
-		  env#local x;
-		  let s = allocate env stack in
-		  (s::stack, [X86Mov (M x, s)])
-              | S_ST x   ->
-		  env#local x;
-		  let s::stack' = stack in
-		  (stack', [X86Mov (s, M x)])
-	      | S_BINOP _ -> failwith "x86 binop"
-(*
-              | S_ADD   ->
-		  let x::y::stack' = stack in
-		  (match x, y with
-		  | S _, S _ ->
-		      (y::stack', [X86Mov (x, eax);
-				   X86Add (eax, y)])
-		  | _ ->
-		      (y::stack', [X86Add (x, y)]))
-              | S_MUL   ->
-		  let x::y::stack' = stack in
-		  (match x, y with
-		  | S _, S _ ->
-		      (y::stack', [X86Mov (y, eax);
-				   X86Mul (x, eax);
-				   X86Mov (eax, y)])
-		  | _ ->
-		      (y::stack', [X86Mul (x, y)]))
-*)
+      let (stack', x86code) =
+        match i with
+        | S_READ   -> ([R 2], [X86Call "read"; X86Mov (eax, R 2)])
+        | S_WRITE  -> ([], [X86Push (R 2); X86Call "write"; X86Pop (R 2)])
+        | S_PUSH n ->
+           let s = allocate env stack in
+           (s::stack, [X86Mov (L n, s)])
+        | S_LD x   ->
+           env#local x;
+           let s = allocate env stack in
+           (s::stack, swap_to_eax (M x) s @@ fun x y -> [X86Mov (x, y)])
+        | S_ST x   ->
+           env#local x;
+           let s::stack' = stack in
+           (stack', [X86Mov (s, M x)])
+        | S_BINOP "+"     ->
+           let x::y::stack' = stack in
+           (y::stack', swap_to_eax x y @@ fun x y -> [X86Add (x, y)])
+        | S_BINOP "-"     ->
+           let x::y::stack' = stack in  (* we need y - x *)
+           (y::stack', swap_to_eax x y @@ fun x y -> [X86Sub (x, y)])
+        | S_BINOP "*"     ->
+           let x::y::stack' = stack in
+           (y::stack', swap_to_eax x y @@ fun x y -> [X86Mul (x, y)])
+        | S_BINOP "/"     ->
+           let x::y::stack' = stack in  (* x -- divider, y -- dividend *)
+           (y::stack', [X86Push (eax); X86Push (edx); X86Cdq; X86Mov (y, eax); X86Div (x, y); X86Mov (eax, y); X86Pop (edx); X86Pop (eax)])
+        | S_BINOP "<"     ->
+           let x::y::stack' = stack in
+           (y::stack', swap_to_eax x y @@ fun x y -> form_comparation x y X86Setl)
+        | S_BINOP ">"     ->
+           let x::y::stack' = stack in
+           (y::stack', swap_to_eax x y @@ fun x y -> form_comparation x y X86Setg)
+        | S_BINOP "=="    ->
+           let x::y::stack' = stack in
+           (y::stack', swap_to_eax x y @@ fun x y -> form_comparation x y X86Sete)
+        | S_BINOP "!="    ->
+           let x::y::stack' = stack in
+           (y::stack', swap_to_eax x y @@ fun x y -> form_comparation x y X86Setne)
+        | S_BINOP "<="    ->
+           let x::y::stack' = stack in
+           (y::stack', swap_to_eax x y @@ fun x y -> form_comparation x y X86Setle)
+        | S_BINOP ">="    ->
+           let x::y::stack' = stack in
+           (y::stack', swap_to_eax x y @@ fun x y -> form_comparation x y X86Setge)
+        (* both && and !! are represented using oprations above. See StackMachine.ml for more details *)
 	    in
 	    x86code @ compile stack' code'
       in

@@ -7,24 +7,24 @@ module Expr =
     type t =
     | Const of int
     | Var   of string
-    | Binop of string * t * t
+    | BinOp of string * t * t
 
     ostap (
       parse:
-        l:addi suf:(("<=" | "<" | "==" | "!=" | ">=" | ">") addi)* {
-           List.fold_left (fun l (op, r) -> Binop (Token.repr op, l, r)) l suf
+        l:addi suf:(("<=" | "<" | "==" | "!=" | ">=" | ">" | "!!" | "&&") addi)* {
+           List.fold_left (fun l (op, r) -> BinOp (Token.repr op, l, r)) l suf
         }
       | addi;
 
       addi:
         l:mulli suf:(("+" | "-") mulli)* {
-          List.fold_left (fun l (op, r) -> Binop (Token.repr op, l, r)) l suf
+          List.fold_left (fun l (op, r) -> BinOp (Token.repr op, l, r)) l suf
         }
       | mulli;
 
       mulli:
         l:primary suf:(("*" | "/" | "%") primary)* {
-           List.fold_left (fun l (op, r) -> Binop (Token.repr op, l, r)) l suf
+           List.fold_left (fun l (op, r) -> BinOp (Token.repr op, l, r)) l suf
         }
       | primary;
 
