@@ -2,23 +2,12 @@ module Expr =
   struct
 
     open Language.Expr
+    open Utils.Operation
 
     let rec eval state = function
     | Const  n -> n
     | Var    x -> state x
-    | BinOp   ("+",  l, r) -> eval state l + eval state r
-    | BinOp   ("-",  l, r) -> eval state l - eval state r
-    | BinOp   ("*",  l, r) -> eval state l * eval state r
-    | BinOp   ("/",  l, r) -> eval state l / eval state r
-    | BinOp   ("%",  l, r) -> eval state l mod eval state r
-    | BinOp   ("<",  l, r) -> if eval state l <  eval state r then 1 else 0
-    | BinOp   (">",  l, r) -> if eval state l >  eval state r then 1 else 0
-    | BinOp   ("==", l, r) -> if eval state l == eval state r then 1 else 0
-    | BinOp   ("!=", l, r) -> if eval state l != eval state r then 1 else 0
-    | BinOp   ("<=", l, r) -> if eval state l <= eval state r then 1 else 0
-    | BinOp   (">=", l, r) -> if eval state l >= eval state r then 1 else 0
-    | BinOp   ("&&", l, r) -> if (eval state l != 0) && (eval state r != 0) then 1 else 0
-    | BinOp   ("!!", l, r) -> if (eval state l != 0) || (eval state l != 0) then 1 else 0
+    | BinOp  (op, l, r) -> perform_op @@ IntBinOp (op, eval state l, eval state r)
  
   end
   

@@ -26,6 +26,9 @@ type x86instr =
   | X86Div  of opnd * opnd
   | X86Mod  of opnd * opnd
   | X86Cmp  of opnd * opnd
+  | X86Xor  of opnd * opnd
+  | X86Or   of opnd * opnd
+  | X86And  of opnd * opnd
   | X86Mov  of opnd * opnd
   | X86Push of opnd
   | X86Pop  of opnd
@@ -73,9 +76,12 @@ module Show =
       | X86Add  (s1, s2) -> Printf.sprintf "\taddl\t%s,\t%s"  (slot s1) (slot s2)
       | X86Sub  (s1, s2) -> Printf.sprintf "\tsubl\t%s,\t%s"  (slot s1) (slot s2)
       | X86Mul  (s1, s2) -> Printf.sprintf "\timull\t%s,\t%s" (slot s1) (slot s2)
-      | X86Div  (s1, s2) -> Printf.sprintf "\tidivl\t%s"      (slot s1)
       | X86Mov  (s1, s2) -> Printf.sprintf "\tmovl\t%s,\t%s"  (slot s1) (slot s2)
       | X86Cmp  (s1, s2) -> Printf.sprintf "\tcmp\t%s,\t%s"   (slot s1) (slot s2)
+      | X86Xor  (s1, s2) -> Printf.sprintf "\txorl\t%s,\t%s"  (slot s1) (slot s2)
+      | X86Or   (s1, s2) -> Printf.sprintf "\torl\t%s,\t%s"   (slot s1) (slot s2)
+      | X86And  (s1, s2) -> Printf.sprintf "\tandl\t%s,\t%s"  (slot s1) (slot s2)
+      | X86Div  (s1, s2) -> Printf.sprintf "\tidivl\t%s"      (slot s1)
       | X86Push  s       -> Printf.sprintf "\tpushl\t%s"      (slot s)
       | X86Pop   s       -> Printf.sprintf "\tpopl\t%s"       (slot s)
       | X86Call  p       -> Printf.sprintf "\tcall\t%s"        p
@@ -92,13 +98,14 @@ module Show =
   end
 
 let form_comparation x y comm =
-  [X86Push eax; X86Cmp (x, y); comm; X86Movzbl; X86Mov (eax, y); X86Pop eax]
+  [X86Cmp (x, y); comm; X86Movzbl]
 
-let swap_to_eax x y f =
-  match x, y with
-  | (M _, S _) -> [X86Push eax; X86Mov (x, eax)] @ (f eax y) @ [X86Pop eax]
-  | (S _, S _) -> [X86Push eax; X86Mov (x, eax)] @ (f eax y) @ [X86Pop eax]
-  | (_, _)     -> (f x y)
+let save_regs a =
+  [X86Push eax; X86Push edx] @ a @ [X86Pop edx; X86Pop eax]
+
+(* result of f should be in eax *)
+let swap_to_regs x y f =
+  save_regs @@ [X86Mov (x, eax); X86Mov (y, edx)] @ (f eax edx) @ [X86Mov (eax, y)]
 
 module Compile =
   struct
@@ -120,42 +127,50 @@ module Compile =
         | S_LD x   ->
            env#local x;
            let s = allocate env stack in
-           (s::stack, swap_to_eax (M x) s @@ fun x y -> [X86Mov (x, y)])
+           (s::stack, swap_to_regs (M x) s @@ fun x y -> [X86Mov (x, y)])
         | S_ST x   ->
            env#local x;
            let s::stack' = stack in
            (stack', [X86Mov (s, M x)])
         | S_BINOP "+"     ->
            let x::y::stack' = stack in
-           (y::stack', swap_to_eax x y @@ fun x y -> [X86Add (x, y)])
+           (y::stack', swap_to_regs x y @@ fun x y -> [X86Add (x, y); X86Mov (y, eax)])
         | S_BINOP "-"     ->
            let x::y::stack' = stack in  (* we need y - x *)
-           (y::stack', swap_to_eax x y @@ fun x y -> [X86Sub (x, y)])
+           (y::stack', swap_to_regs x y @@ fun x y -> [X86Sub (x, y); X86Mov (y, eax)])
         | S_BINOP "*"     ->
            let x::y::stack' = stack in
-           (y::stack', swap_to_eax x y @@ fun x y -> [X86Mul (x, y)])
+           (y::stack', save_regs [X86Mov (y, eax); X86Mul (x, eax); X86Mov (eax, y)])
         | S_BINOP "/"     ->
            let x::y::stack' = stack in  (* x -- divider, y -- dividend *)
-           (y::stack', [X86Push (eax); X86Push (edx); X86Cdq; X86Mov (y, eax); X86Div (x, y); X86Mov (eax, y); X86Pop (edx); X86Pop (eax)])
+           (y::stack', save_regs [X86Mov (y, eax); X86Cdq; X86Div (x, y); X86Mov (eax, y)])
+        | S_BINOP "%"     ->
+           let x::y::stack' = stack in
+           (y::stack', save_regs [X86Mov (y, eax); X86Cdq; X86Div (x, y); X86Mov (edx, y)])
         | S_BINOP "<"     ->
            let x::y::stack' = stack in
-           (y::stack', swap_to_eax x y @@ fun x y -> form_comparation x y X86Setl)
+           (y::stack', swap_to_regs x y @@ fun x y -> form_comparation x y X86Setl)
         | S_BINOP ">"     ->
            let x::y::stack' = stack in
-           (y::stack', swap_to_eax x y @@ fun x y -> form_comparation x y X86Setg)
+           (y::stack', swap_to_regs x y @@ fun x y -> form_comparation x y X86Setg)
         | S_BINOP "=="    ->
            let x::y::stack' = stack in
-           (y::stack', swap_to_eax x y @@ fun x y -> form_comparation x y X86Sete)
+           (y::stack', swap_to_regs x y @@ fun x y -> form_comparation x y X86Sete)
         | S_BINOP "!="    ->
            let x::y::stack' = stack in
-           (y::stack', swap_to_eax x y @@ fun x y -> form_comparation x y X86Setne)
+           (y::stack', swap_to_regs x y @@ fun x y -> form_comparation x y X86Setne)
         | S_BINOP "<="    ->
            let x::y::stack' = stack in
-           (y::stack', swap_to_eax x y @@ fun x y -> form_comparation x y X86Setle)
+           (y::stack', swap_to_regs x y @@ fun x y -> form_comparation x y X86Setle)
         | S_BINOP ">="    ->
            let x::y::stack' = stack in
-           (y::stack', swap_to_eax x y @@ fun x y -> form_comparation x y X86Setge)
-        (* both && and !! are represented using oprations above. See StackMachine.ml for more details *)
+           (y::stack', swap_to_regs x y @@ fun x y -> form_comparation x y X86Setge)
+        | S_BINOP "&&"    ->
+           let x::y::stack' = stack in
+           (y::stack', save_regs [X86Xor (eax, eax); X86Mov (x, edx); X86And (edx, edx); X86Cmp (edx, eax); X86Setne; X86Mul (eax, edx); X86And (edx, edx); X86Xor (eax, eax); X86Cmp (edx, eax); X86Setne; X86Mov (eax, y)])
+        | S_BINOP "!!"    ->
+           let x::y::stack' = stack in
+           (y::stack', save_regs [X86Xor (eax, eax); X86Mov (x, edx); X86Or (y, edx); X86Cmp (edx, eax); X86Setne; X86Mov (eax, y)])
 	    in
 	    x86code @ compile stack' code'
       in

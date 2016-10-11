@@ -9,6 +9,8 @@ type i =
 module Interpreter =
   struct
 
+    open Utils.Operation
+
     let run input code =
       let rec run' (state, stack, input, output) code =
 	match code with
@@ -29,58 +31,9 @@ module Interpreter =
               | S_ST x ->
 		  let y::stack' = stack in
 		  ((x, y)::state, stack', input, output)
-              | S_BINOP "+" ->
+              | S_BINOP op ->
 		  let y::x::stack' = stack in
-		  (state, (x + y)::stack', input, output)
-              | S_BINOP "-" ->
-		  let y::x::stack' = stack in
-		  (state, (x - y)::stack', input, output)
-              | S_BINOP "*" ->
-		  let y::x::stack' = stack in
-		  (state, (x * y)::stack', input, output)
-              | S_BINOP "/" ->
-		  let y::x::stack' = stack in
-		  (state, (x / y)::stack', input, output)
-              | S_BINOP "%" ->
-      let y::x::stack' = stack in
-      (state, (x mod y)::stack', input, output)
-              | S_BINOP "<" ->
-      let y::x::stack' = stack in
-      if x < y then
-        (state, 1::stack', input, output)
-      else
-        (state, 0::stack', input, output)
-              | S_BINOP ">" ->
-      let y::x::stack' = stack in
-      if x > y then
-        (state, 1::stack', input, output)
-      else
-        (state, 0::stack', input, output)
-              | S_BINOP "==" ->
-      let y::x::stack' = stack in
-      if x == y then
-        (state, 1::stack', input, output)
-      else
-        (state, 0::stack', input, output)
-              | S_BINOP "!=" ->
-      let y::x::stack' = stack in
-      if x != y then
-        (state, 1::stack', input, output)
-      else
-        (state, 0::stack', input, output)
-              | S_BINOP "<=" ->
-      let y::x::stack' = stack in
-      if x <= y then
-        (state, 1::stack', input, output)
-      else
-        (state, 0::stack', input, output)
-              | S_BINOP ">=" ->
-      let y::x::stack' = stack in
-      if x >= y then
-        (state, 1::stack', input, output)
-      else
-        (state, 0::stack', input, output)
-  (* && and !! operations are represented through operations above. See `compile_expr` for more details.  *)
+		  (state, (perform_op @@ IntBinOp (op, x, y))::stack', input, output)
               )
               code'
       in
@@ -97,31 +50,10 @@ module Compile =
     let rec compile_expr = function
     | Var   x -> [S_LD   x]
     | Const n -> [S_PUSH n]
-    | BinOp  ("+",  l, r) -> compile_expr l @ compile_expr r @ [S_BINOP "+"]
-    | BinOp  ("-",  l, r) -> compile_expr l @ compile_expr r @ [S_BINOP "-"]
-    | BinOp  ("*",  l, r) -> compile_expr l @ compile_expr r @ [S_BINOP "*"]
-    | BinOp  ("/",  l, r) -> compile_expr l @ compile_expr r @ [S_BINOP "/"]
-    | BinOp  ("%",  l, r) -> 
+    | BinOp (op, l, r) ->
       let l' = compile_expr l in
       let r' = compile_expr r in
-        l' @ r' @ l' @ r' @ [S_BINOP "/"; S_BINOP "*"; S_BINOP "-"]
-    | BinOp  ("<",  l, r) -> compile_expr l @ compile_expr r @ [S_BINOP "<"]
-    | BinOp  (">",  l, r) -> compile_expr l @ compile_expr r @ [S_BINOP ">"]
-    | BinOp  ("==", l, r) -> compile_expr l @ compile_expr r @ [S_BINOP "=="]
-    | BinOp  ("!=", l, r) -> compile_expr l @ compile_expr r @ [S_BINOP "!="]
-    | BinOp  ("<=", l, r) -> compile_expr l @ compile_expr r @ [S_BINOP "<="]
-    | BinOp  (">=", l, r) -> compile_expr l @ compile_expr r @ [S_BINOP ">="]
-    | BinOp  ("&&", l, r) -> 
-      let l'  = compile_expr l in
-      let r'  = compile_expr r in
-      let z   = compile_expr @@ Const 0 in
-      let two = compile_expr @@ Const 2 in
-        two @ z @ l' @ [S_BINOP "!="] @ z @ r' @ [S_BINOP "!="] @ [S_BINOP "+"] @ [S_BINOP "=="]
-    | BinOp  ("!!", l, r) -> 
-      let l'  = compile_expr l in
-      let r'  = compile_expr r in
-      let z   = compile_expr @@ Const 0 in
-        z @ z @ l' @ [S_BINOP "!="] @ z @ r' @ [S_BINOP "!="] @ [S_BINOP "+"] @ [S_BINOP "<"]
+        l' @ r' @ [S_BINOP op]
 
     let rec stmt = function
     | Skip          -> []
