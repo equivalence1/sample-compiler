@@ -20,28 +20,31 @@ let esi = R 4
 let edi = R 5
 
 type x86instr =
-  | X86Add  of opnd * opnd
-  | X86Mul  of opnd * opnd
-  | X86Sub  of opnd * opnd
-  | X86Div  of opnd * opnd
-  | X86Mod  of opnd * opnd
-  | X86Cmp  of opnd * opnd
-  | X86Xor  of opnd * opnd
-  | X86Or   of opnd * opnd
-  | X86And  of opnd * opnd
-  | X86Mov  of opnd * opnd
-  | X86Push of opnd
-  | X86Pop  of opnd
+  | X86Add    of opnd * opnd
+  | X86Mul    of opnd * opnd
+  | X86Sub    of opnd * opnd
+  | X86Div    of opnd * opnd
+  | X86Mod    of opnd * opnd
+  | X86Cmp    of opnd * opnd
+  | X86Xor    of opnd * opnd
+  | X86Or     of opnd * opnd
+  | X86And    of opnd * opnd
+  | X86Mov    of opnd * opnd
+  | X86Push   of opnd
+  | X86Pop    of opnd
+  | X86Set    of string * string
+  | X86Movzbl of string * string
+  | X86Call   of string
   | X86Cdq
+  | X86Ret
+(*
   | X86Setl
   | X86Setle
   | X86Setg
   | X86Setge
   | X86Sete
   | X86Setne
-  | X86Movzbl
-  | X86Ret
-  | X86Call of string
+*)
 
 module S = Set.Make (String)
 
@@ -73,32 +76,27 @@ module Show =
       | L i -> Printf.sprintf "$%d" i
 
     let instr = function
-      | X86Add  (s1, s2) -> Printf.sprintf "\taddl\t%s,\t%s"  (slot s1) (slot s2)
-      | X86Sub  (s1, s2) -> Printf.sprintf "\tsubl\t%s,\t%s"  (slot s1) (slot s2)
-      | X86Mul  (s1, s2) -> Printf.sprintf "\timull\t%s,\t%s" (slot s1) (slot s2)
-      | X86Mov  (s1, s2) -> Printf.sprintf "\tmovl\t%s,\t%s"  (slot s1) (slot s2)
-      | X86Cmp  (s1, s2) -> Printf.sprintf "\tcmp\t%s,\t%s"   (slot s1) (slot s2)
-      | X86Xor  (s1, s2) -> Printf.sprintf "\txorl\t%s,\t%s"  (slot s1) (slot s2)
-      | X86Or   (s1, s2) -> Printf.sprintf "\torl\t%s,\t%s"   (slot s1) (slot s2)
-      | X86And  (s1, s2) -> Printf.sprintf "\tandl\t%s,\t%s"  (slot s1) (slot s2)
-      | X86Div  (s1, s2) -> Printf.sprintf "\tidivl\t%s"      (slot s1)
-      | X86Push  s       -> Printf.sprintf "\tpushl\t%s"      (slot s)
-      | X86Pop   s       -> Printf.sprintf "\tpopl\t%s"       (slot s)
-      | X86Call  p       -> Printf.sprintf "\tcall\t%s"        p
-      | X86Setl          -> "\tsetl\t%al"
-      | X86Setle         -> "\tsetle\t%al"
-      | X86Sete          -> "\tsete\t%al"
-      | X86Setne         -> "\tsetne\t%al"
-      | X86Setg          -> "\tsetg\t%al"
-      | X86Setge         -> "\tsetge\t%al"
-      | X86Movzbl        -> "\tmovzbl\t%al,\t%eax"
-      | X86Ret           -> "\tret"
-      | X86Cdq           -> "\tcdq"
+      | X86Add  (s1, s2)   -> Printf.sprintf "\taddl\t%s,\t%s"  (slot s1) (slot s2)
+      | X86Sub  (s1, s2)   -> Printf.sprintf "\tsubl\t%s,\t%s"  (slot s1) (slot s2)
+      | X86Mul  (s1, s2)   -> Printf.sprintf "\timull\t%s,\t%s" (slot s1) (slot s2)
+      | X86Mov  (s1, s2)   -> Printf.sprintf "\tmovl\t%s,\t%s"  (slot s1) (slot s2)
+      | X86Cmp  (s1, s2)   -> Printf.sprintf "\tcmp\t%s,\t%s"   (slot s1) (slot s2)
+      | X86Xor  (s1, s2)   -> Printf.sprintf "\txorl\t%s,\t%s"  (slot s1) (slot s2)
+      | X86Or   (s1, s2)   -> Printf.sprintf "\torl\t%s,\t%s"   (slot s1) (slot s2)
+      | X86And  (s1, s2)   -> Printf.sprintf "\tandl\t%s,\t%s"  (slot s1) (slot s2)
+      | X86Set  (cmp, reg) -> Printf.sprintf "\tset%s\t%%%s"    (cmp    ) (reg    )
+      | X86Div  (s1, s2)   -> Printf.sprintf "\tidivl\t%s"      (slot s1)
+      | X86Push  s         -> Printf.sprintf "\tpushl\t%s"      (slot s)
+      | X86Pop   s         -> Printf.sprintf "\tpopl\t%s"       (slot s)
+      | X86Call  p         -> Printf.sprintf "\tcall\t%s"        p
+      | X86Movzbl (small_reg, reg) -> Printf.sprintf "\tmovzbl\t%%%s,\t%%%s" (small_reg) (reg)
+      | X86Ret             -> "\tret"
+      | X86Cdq             -> "\tcdq"
 
   end
 
-let form_comparation x y comm =
-  [X86Cmp (x, y); comm; X86Movzbl]
+let form_comparation x y op_name small_reg reg =
+  [X86Cmp (x, y); X86Set (op_name, small_reg); X86Movzbl (small_reg, reg)]
 
 let save_regs a =
   [X86Push eax; X86Push edx] @ a @ [X86Pop edx; X86Pop eax]
@@ -106,6 +104,9 @@ let save_regs a =
 (* result of f should be in eax *)
 let swap_to_regs x y f =
   save_regs @@ [X86Mov (x, eax); X86Mov (y, edx)] @ (f eax edx) @ [X86Mov (eax, y)]
+
+let standard_compare x y cmp small_reg reg =
+  swap_to_regs x y @@ fun x y -> form_comparation x y (Utils.Operation.cmp_to_name cmp) small_reg reg
 
 module Compile =
   struct
@@ -147,30 +148,15 @@ module Compile =
         | S_BINOP "%"     ->
            let x::y::stack' = stack in
            (y::stack', save_regs [X86Mov (y, eax); X86Cdq; X86Div (x, y); X86Mov (edx, y)])
-        | S_BINOP "<"     ->
-           let x::y::stack' = stack in
-           (y::stack', swap_to_regs x y @@ fun x y -> form_comparation x y X86Setl)
-        | S_BINOP ">"     ->
-           let x::y::stack' = stack in
-           (y::stack', swap_to_regs x y @@ fun x y -> form_comparation x y X86Setg)
-        | S_BINOP "=="    ->
-           let x::y::stack' = stack in
-           (y::stack', swap_to_regs x y @@ fun x y -> form_comparation x y X86Sete)
-        | S_BINOP "!="    ->
-           let x::y::stack' = stack in
-           (y::stack', swap_to_regs x y @@ fun x y -> form_comparation x y X86Setne)
-        | S_BINOP "<="    ->
-           let x::y::stack' = stack in
-           (y::stack', swap_to_regs x y @@ fun x y -> form_comparation x y X86Setle)
-        | S_BINOP ">="    ->
-           let x::y::stack' = stack in
-           (y::stack', swap_to_regs x y @@ fun x y -> form_comparation x y X86Setge)
         | S_BINOP "&&"    ->
            let x::y::stack' = stack in
-           (y::stack', save_regs [X86Xor (eax, eax); X86Mov (x, edx); X86And (edx, edx); X86Cmp (edx, eax); X86Setne; X86Mul (eax, edx); X86And (edx, edx); X86Xor (eax, eax); X86Cmp (edx, eax); X86Setne; X86Mov (eax, y)])
+           (y::stack', save_regs [X86Xor (eax, eax); X86Mov (x, edx); X86And (edx, edx); X86Cmp (edx, eax); X86Set ("ne", "al"); X86Mul (eax, edx); X86And (edx, edx); X86Xor (eax, eax); X86Cmp (edx, eax); X86Set ("ne", "al"); X86Mov (eax, y)])
         | S_BINOP "!!"    ->
            let x::y::stack' = stack in
-           (y::stack', save_regs [X86Xor (eax, eax); X86Mov (x, edx); X86Or (y, edx); X86Cmp (edx, eax); X86Setne; X86Mov (eax, y)])
+           (y::stack', save_regs [X86Xor (eax, eax); X86Mov (x, edx); X86Or (y, edx); X86Cmp (edx, eax); X86Set ("ne", "al"); X86Mov (eax, y)])
+        | S_BINOP cmp     ->
+           let x::y::stack' = stack in
+           (y::stack', standard_compare x y cmp "al" "eax") 
 	    in
 	    x86code @ compile stack' code'
       in

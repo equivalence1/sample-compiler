@@ -5,9 +5,9 @@ module Expr =
     open Utils.Operation
 
     let rec eval state = function
-    | Const  n -> n
-    | Var    x -> state x
-    | BinOp  (op, l, r) -> perform_op @@ IntBinOp (op, eval state l, eval state r)
+    | Const n -> n
+    | Var   x -> state x
+    | BinOp (op, l, r) -> perform_op op (eval state l) (eval state r)
  
   end
   

@@ -33,7 +33,7 @@ module Interpreter =
 		  ((x, y)::state, stack', input, output)
               | S_BINOP op ->
 		  let y::x::stack' = stack in
-		  (state, (perform_op @@ IntBinOp (op, x, y))::stack', input, output)
+		  (state, (perform_op op x y)::stack', input, output)
               )
               code'
       in

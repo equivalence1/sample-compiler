@@ -9,29 +9,46 @@ module Expr =
     | Var   of string
     | BinOp of string * t * t
 
+    let make_foldl l suf = List.fold_left (fun l (op, r) -> BinOp (Token.repr op, l, r)) l suf
+
     ostap (
       parse:
+        ori;
+
+      ori:
+        l:andi suf:(("!!") andi)* {
+          make_foldl l suf
+        }
+      | andi;
+
+      andi:
+        l:cmpi suf:(("&&") cmpi)* {
+          make_foldl l suf
+        }
+      | cmpi;
+
+      cmpi:
         l:addi suf:(("<=" | "<" | "==" | "!=" | ">=" | ">" | "!!" | "&&") addi)* {
-           List.fold_left (fun l (op, r) -> BinOp (Token.repr op, l, r)) l suf
+          make_foldl l suf
         }
       | addi;
 
       addi:
         l:mulli suf:(("+" | "-") mulli)* {
-          List.fold_left (fun l (op, r) -> BinOp (Token.repr op, l, r)) l suf
+          make_foldl l suf
         }
       | mulli;
 
       mulli:
         l:primary suf:(("*" | "/" | "%") primary)* {
-           List.fold_left (fun l (op, r) -> BinOp (Token.repr op, l, r)) l suf
+          make_foldl l suf
         }
       | primary;
 
       primary:
         n:DECIMAL {Const n}
       | x:IDENT   {Var   x}
-      | -"(" parse -")"
+      | -"(" ori -")"
     )
 
   end
