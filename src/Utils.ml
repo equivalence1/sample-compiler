@@ -12,12 +12,12 @@ module Operation =
       | "%"  -> fun l r -> l mod r
       | "<"  -> fun l r -> if l <  r then 1 else 0
       | ">"  -> fun l r -> if l >  r then 1 else 0
-      | "==" -> fun l r -> if l == r then 1 else 0
-      | "!=" -> fun l r -> if l != r then 1 else 0
+      | "==" -> fun l r -> if l =  r then 1 else 0
+      | "!=" -> fun l r -> if l <> r then 1 else 0
       | "<=" -> fun l r -> if l <= r then 1 else 0
       | ">=" -> fun l r -> if l >= r then 1 else 0
-      | "&&" -> fun l r -> if (l != 0) && (r != 0) then 1 else 0
-      | "!!" -> fun l r -> if (l != 0) || (r != 0) then 1 else 0
+      | "&&" -> fun l r -> if (l <> 0) && (r <> 0) then 1 else 0
+      | "!!" -> fun l r -> if (l <> 0) || (r <> 0) then 1 else 0
 
     let cmp_to_name cmp =
       match cmp with

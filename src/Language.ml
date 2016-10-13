@@ -13,22 +13,16 @@ module Expr =
 
     ostap (
       parse:
-        ori;
-
-      ori:
-        l:andi suf:(("!!") andi)* {
-          make_foldl l suf
-        }
-      | andi;
+        andi;
 
       andi:
-        l:cmpi suf:(("&&") cmpi)* {
+        l:cmpi suf:(("!!" | "&&") cmpi)* {
           make_foldl l suf
         }
       | cmpi;
 
       cmpi:
-        l:addi suf:(("<=" | "<" | "==" | "!=" | ">=" | ">" | "!!" | "&&") addi)* {
+        l:addi suf:(("<=" | "<" | "==" | "!=" | ">=" | ">") addi)* {
           make_foldl l suf
         }
       | addi;
@@ -48,7 +42,7 @@ module Expr =
       primary:
         n:DECIMAL {Const n}
       | x:IDENT   {Var   x}
-      | -"(" ori -")"
+      | -"(" parse -")"
     )
 
   end

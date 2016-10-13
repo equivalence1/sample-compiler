@@ -150,7 +150,7 @@ module Compile =
            (y::stack', save_regs [X86Mov (y, eax); X86Cdq; X86Div (x, y); X86Mov (edx, y)])
         | S_BINOP "&&"    ->
            let x::y::stack' = stack in
-           (y::stack', save_regs [X86Xor (eax, eax); X86Mov (x, edx); X86And (edx, edx); X86Cmp (edx, eax); X86Set ("ne", "al"); X86Mul (eax, edx); X86And (edx, edx); X86Xor (eax, eax); X86Cmp (edx, eax); X86Set ("ne", "al"); X86Mov (eax, y)])
+           (y::stack', save_regs [X86Xor (eax, eax); X86Mov (x, edx); X86Cmp (edx, eax); X86Set ("ne", "al"); X86Mov (y, edx); X86Mul (eax, edx); X86Xor (eax, eax); X86Cmp (edx, eax); X86Set ("ne", "al"); X86Mov (eax, y)])
         | S_BINOP "!!"    ->
            let x::y::stack' = stack in
            (y::stack', save_regs [X86Xor (eax, eax); X86Mov (x, edx); X86Or (y, edx); X86Cmp (edx, eax); X86Set ("ne", "al"); X86Mov (eax, y)])
