@@ -13,10 +13,16 @@ module Expr =
 
     ostap (
       parse:
-        andi;
+        ori;
+      
+      ori:
+        l:andi suf:(("!!") andi)* {
+          make_foldl l suf
+        }
+      | andi;
 
       andi:
-        l:cmpi suf:(("!!" | "&&") cmpi)* {
+        l:cmpi suf:(("&&") cmpi)* {
           make_foldl l suf
         }
       | cmpi;
