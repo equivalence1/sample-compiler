@@ -28,5 +28,13 @@ module Operation =
       | ">=" -> "ge"
       | "<=" -> "le"
 
+    let name_to_cmp cmp =
+      match cmp with
+      | "l"  -> "<"
+      | "g"  -> ">"
+      | "e"  -> "=="
+      | "ne" -> "!="
+      | "ge" -> ">="
+      | "le" -> "<="
 
   end

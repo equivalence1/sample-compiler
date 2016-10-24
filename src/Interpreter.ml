@@ -27,6 +27,18 @@ module Stmt =
 	      | Read    x     ->
 	        let y::input' = input in
 	        ((x, y) :: state, input', output)
+          | If (e, s1, s2) -> 
+            let e_val = Expr.eval state' e in
+            if e_val <> 0 then
+              eval' c s1
+            else
+              eval' c s2
+          | While (e, s) ->
+            let e_val = Expr.eval state' e in
+            if e_val <> 0 then
+              eval' c @@ Seq (s, While (e, s))
+            else
+              c
       in
       let (_, _, result) = eval' ([], input, []) stmt in
       result
