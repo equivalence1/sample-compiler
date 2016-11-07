@@ -1,0 +1,9 @@
+	.text
+	.comm	x0,	4,	4
+	.comm	x1,	4,	4
+	.comm	y,	4,	4
+	.globl	main
+main:
+	popl	%ecx
+	xorl	%eax,	%eax
+	ret

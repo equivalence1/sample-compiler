@@ -1,5 +1,6 @@
-_build/
-gcc_test/
-*.o
+_build
 *.byte
 *.native
+*.o
+*.log
+*.s
