@@ -36,23 +36,11 @@ let main = ()
                     failwith "not supported" (*
                     let basename = Filename.chop_suffix filename ".expr" in 
 	                X86.build prog basename *)
-	            | _ ->
-	                let rec read acc =
-	                    try
-		                    let r = read_int () in
-		                    Printf.printf "> ";
-		                    read (acc @ [r]) 
-                        with End_of_file -> acc
-	                in
-	                let input = read [] in
-	                let output =
-                        match mode with
-                        | `SM -> 
-                            failwith "not supported" 
-                            (* StackMachine.Interpreter.run input (StackMachine.Compile.prog prog) *)
-	                    | _   -> Interpreter.Prog.eval input prog
-	                in
-	                List.iter (fun i -> Printf.printf "%d\n" i) output
+	            | `SM  -> 
+                    let code = StackMachine.Prog.compile prog in
+                    (* StackMachine.Interpreter.debug_print code; *)
+                    StackMachine.Interpreter.run code
+                | _    -> Interpreter.Prog.eval prog
 	        )
 
         | `Fail er -> Printf.eprintf "%s\n" er

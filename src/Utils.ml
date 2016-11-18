@@ -43,20 +43,28 @@ module StringMap = Map.Make (String)
 
 module InterpreterEnv =
     struct
-        (* Map of functions, state, input, output *)
-        type t = (int list -> t -> (int * t)) StringMap.t * (string * int) list * int list * int list
+        (* Map of functions: f(args, cur_env) -> (result, new_env), state *)
+        type t = (int list -> t -> int) StringMap.t * (string * int) list
 
-        let init_env input = (StringMap.empty, [], input, [])
+        let init_env = (StringMap.empty, [])
 
-        let add_func name f (fmap, state, input, output) = (StringMap.add name f fmap, state, input, output)
-        let get_func name   (fmap, state, input, output) = StringMap.find name fmap
+        let add_func name f (fmap, state) = (StringMap.add name f fmap, state)
+        let get_func name   (fmap, state) = StringMap.find name fmap
 
-        let set_var name value (fmap, state, input, output) = (fmap, (name, value)::state,  input, output)
-        let get_var name       (fmap, state, input, output) = List.assoc name state
+        let set_var name value (fmap, state) = (fmap, (name, value)::state)
+        let get_var name       (fmap, state) = List.assoc name state
+    end
 
-        let write_value value (fmap, state, input, output) = (fmap, state, input, output @ [value])
-        let read_var name (fmap, state, input, output) = 
-            match input with
-            | [] -> failwith "Cannot read. Input is empty"
-            | i::input' -> (fmap, (name, i)::state, input', output)
+module StackMachineEnv =
+    struct
+        (* return address, state *)
+        type t = int * (string * int) list
+
+        let init_env = (0, [])
+
+        let set_ret addr (_, state) = (addr, state)
+        let get_ret (addr, state)   = addr
+
+        let set_var name value (addr, state) = (addr, (name, value)::state)
+        let get_var name       (addr, state) = List.assoc name state
     end
