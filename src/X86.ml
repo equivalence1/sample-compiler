@@ -261,7 +261,7 @@ module Compile =
                 | (R 2)::_ -> ([X86Push ecx],                                                                            [X86Pop ecx])
                 | (R 3)::_ -> ([X86Push ecx; X86Push ebx],                                                   [X86Pop ebx; X86Pop ecx])
                 | (R 4)::_ -> ([X86Push ecx; X86Push ebx; X86Push esi],                          [X86Pop esi; X86Pop ebx; X86Pop ecx])
-                | (S _)::_ -> ([X86Push ecx; X86Push ebx; X86Push esi; X86Push edi], [X86Pop edi; X86Pop esi; X86Pop ebx; X86Pop ecx])
+                | _::_     -> ([X86Push ecx; X86Push ebx; X86Push esi; X86Push edi], [X86Pop edi; X86Pop esi; X86Pop ebx; X86Pop ecx])
             in
             let s = allocate env stack' (List.length locals) in
             let add = List.length (fst (List.assoc name full_meta)) in
