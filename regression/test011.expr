@@ -10,6 +10,6 @@ end
 
 x := 2;
 write(b(x));
-a := 1;
-b := 2;
-write(a(a, b))
+aa := 1;
+bb := 2;
+write(a(aa, bb))

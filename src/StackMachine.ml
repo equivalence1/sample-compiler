@@ -9,8 +9,9 @@ type i =
 | S_JMPC  of string * string (* jmpc compares with zero *)
 | S_LABLE of string
 | S_CALL  of string
-| S_RET   (* S_RET -- return value is the top of stack and return address is the next value on stack *)
+| S_RET
 | S_DROP (* drop 1 element from top of stack *)
+| S_PARAM of string
 
 module Interpreter =
   struct
@@ -61,6 +62,16 @@ module Interpreter =
             let env' = StackMachineEnv.set_var x y env in
             run' (env'::env_stack') stack' code' full_code
 
+            (* same as S_ST here, but will be different in x86
+             *
+             * we cant use S_ST here, because it is not right in x86.
+             * So we need new instruction, which we will treat as S_ST
+             * here, but will just skip in x86.*)
+          | S_PARAM x ->
+            let y::stack' = stack in
+            let env' = StackMachineEnv.set_var x y env in
+            run' (env'::env_stack') stack' code' full_code
+
           | S_BINOP op ->
             let r::l::stack' = stack in
             run' env_stack ((perform_op op l r)::stack') code' full_code
@@ -84,9 +95,8 @@ module Interpreter =
             run' (fun_env::env_stack) stack (jump_to_lable name full_code) full_code
 
           | S_RET ->
-            let ret::stack' = stack in
             let addr = StackMachineEnv.get_ret env in
-            run' env_stack' (ret::stack') (go_to_insruction_no addr full_code) full_code
+            run' env_stack' stack (go_to_insruction_no addr full_code) full_code
 
           | S_DROP ->
             let y::stack' = stack in
@@ -114,6 +124,7 @@ module Interpreter =
           | S_CALL (name)         -> Printf.eprintf "S_CALL %s\n" name;              debug_print code'
           | S_RET                 -> Printf.eprintf "S_RET\n";                       debug_print code'
           | S_DROP                -> Printf.eprintf "S_DROP\n";                      debug_print code'
+          | S_PARAM x             -> Printf.eprintf "S_PARAM %s\n" x;                debug_print code'
 
   end
 
@@ -144,32 +155,33 @@ module Compile =
             let r' = compile_expr r in
                 l' @ r' @ [S_BINOP op]
         | Call (name, args) ->
-            let compile_arg arg code = code @ (compile_expr arg) in
-            (List.fold_right compile_arg args []) @ [S_CALL name] (* f (a, b) -> [a, b] *)
-        | _ -> failwith "compile_expr: no matching"             (*                ^ stack top *)
+            let args' = List.rev args in
+            let compile_arg code arg = code @ (compile_expr arg) in
+            (List.fold_left compile_arg [] args') @ [S_CALL name] (* f (a, b) -> [a, b] *)
+        | _ -> failwith "compile_expr: no matching"             (*                 ^ stack top *)
 
-        let stmt =
-            let rec stmt' labler = function
-            | Skip          -> []
-            | Assign (x, e) -> compile_expr e @ [S_ST x]
-            | Read    x     -> [S_READ; S_ST x]
-            | Write   e     -> compile_expr e @ [S_WRITE]
-            | Seq    (l, r) -> stmt' labler l @ stmt' labler r
-            | If (e, s1, s2) -> 
-                let cur_if_number = labler#next_if_lable in
-                let l1            = "else_" ^ cur_if_number in
-                let l2            = "fi_"          ^ cur_if_number in 
-                    compile_expr e @ [S_JMPC ("e", l1)] @ stmt' labler s1 @ [S_JMP l2; S_LABLE l1] @ stmt' labler s2 @ [S_LABLE l2]
-            | While (e, s1) -> 
-                let cur_while_number = labler#next_while_lable in
-                let l1               = "start_while_" ^ cur_while_number in
-                let l2               = "end_while_"   ^ cur_while_number in 
-                [S_LABLE l1] @ compile_expr e @ [S_JMPC ("e", l2)] @ stmt' labler s1 @ [S_JMP l1; S_LABLE l2]
-            | Call (name, args) ->
-                (compile_expr (Call (name, args))) @ [S_DROP]
-            | Return e ->
-                (compile_expr e) @ [S_RET]
-        in stmt' (new labler)
+        let rec stmt' labler = function
+        | Skip          -> []
+        | Assign (x, e) -> compile_expr e @ [S_ST x]
+        | Read    x     -> [S_READ; S_ST x]
+        | Write   e     -> compile_expr e @ [S_WRITE]
+        | Seq    (l, r) -> stmt' labler l @ stmt' labler r
+        | If (e, s1, s2) -> 
+            let cur_if_number = labler#next_if_lable in
+            let l1            = "else_" ^ cur_if_number in
+            let l2            = "fi_"          ^ cur_if_number in 
+                compile_expr e @ [S_JMPC ("e", l1)] @ stmt' labler s1 @ [S_JMP l2; S_LABLE l1] @ stmt' labler s2 @ [S_LABLE l2]
+        | While (e, s1) -> 
+            let cur_while_number = labler#next_while_lable in
+            let l1               = "start_while_" ^ cur_while_number in
+            let l2               = "end_while_"   ^ cur_while_number in 
+            [S_LABLE l1] @ compile_expr e @ [S_JMPC ("e", l2)] @ stmt' labler s1 @ [S_JMP l1; S_LABLE l2]
+        | Call (name, args) ->
+            (compile_expr (Call (name, args))) @ [S_DROP]
+        | Return e ->
+            (compile_expr e) @ [S_RET]
+        
+        let stmt = stmt' (new labler)
 
     end
 
@@ -177,13 +189,15 @@ module Prog =
     struct
 
         open Language.Unit
+        open Language.Stmt
+        open Utils
 
         let compile prog =
             match prog with
             | (funcs, main) ->
                 let compile_func code (name, (params, stmt)) = 
-                    let init_params = List.map (fun x -> S_ST x) (List.rev params) in
-                    code @ [S_LABLE name] @ init_params @ (Compile.stmt stmt)
+                    let show_params = List.map (fun x -> S_PARAM x) params in
+                    code @ [S_LABLE name] @ show_params @ (Compile.stmt stmt)
                 in
                 (List.fold_left compile_func [] funcs) @ [S_LABLE "main"] @ (Compile.stmt main)
 

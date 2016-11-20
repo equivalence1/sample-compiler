@@ -2,13 +2,10 @@ TESTS=$(basename $(wildcard $(sort generated*.expr)))
 
 .PHONY: check $(TESTS)
 
-check: make_src $(TESTS)
-
-make_src:
-	cd ../.. && make -f Makefile.ob clean && make -f Makefile.ob
+check: $(TESTS)
 
 $(TESTS): %: %.expr
-#	RC_RUNTIME=../../runtime ../../rc.native -o  $< && cat $@.input | ./$@ > $@.log && diff $@.log orig/$@.log
+	RC_RUNTIME=../../runtime ../../rc.native -o  $< && cat $@.input | ./$@ > $@.log && diff $@.log orig/$@.log
 	cat $@.input | RC_RUNTIME=../../runtime ../../rc.native -i $< > $@.log && diff $@.log orig/$@.log
 	cat $@.input | RC_RUNTIME=../../runtime ../../rc.native -s $< > $@.log && diff $@.log orig/$@.log
 

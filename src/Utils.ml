@@ -39,7 +39,43 @@ module Operation =
 
   end
 
+module Meta =
+    struct
+
+        open Language.Stmt
+        
+        let rec get_meta acc func_list =
+            match func_list with
+            | [] -> acc
+            | (name, (params, stmt))::func_list' ->
+                let rec get_locals params locals stmt =
+                    match stmt with
+                    | Read x ->
+                        if (not (List.exists (fun y -> y = x) params) && not (List.exists (fun y -> y = x) locals))
+                        then x::locals
+                        else locals
+                    | Assign (x, e) ->
+                        if (not (List.exists (fun y -> y = x) params) && not (List.exists (fun y -> y = x) locals))
+                        then x::locals
+                        else locals
+                    | Seq (l, r) ->
+                        let locals' = get_locals params locals l in
+                         get_locals params locals' r
+                    | If (e, s1, s2) ->
+                        let locals' = get_locals params locals s1 in
+                        get_locals params locals' s2
+                    | While (e, s) ->
+                        get_locals params locals s
+                    | _ -> locals
+                in
+                if name <> "main"
+                then get_meta ((name, (params, get_locals params [] stmt))::acc) func_list'
+                else get_meta ((name, (params, []))::acc) func_list' (* main function has no locals *)
+
+    end
+
 module StringMap = Map.Make (String)
+module StringSet = Set.Make (String)
 
 module InterpreterEnv =
     struct

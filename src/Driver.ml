@@ -33,12 +33,11 @@ let main = ()
 	        (
                 match mode with
 	            | `X86 ->
-                    failwith "not supported" (*
                     let basename = Filename.chop_suffix filename ".expr" in 
-	                X86.build prog basename *)
+	                X86.build prog basename
 	            | `SM  -> 
                     let code = StackMachine.Prog.compile prog in
-                    (* StackMachine.Interpreter.debug_print code; *)
+                    (*StackMachine.Interpreter.debug_print code;*)
                     StackMachine.Interpreter.run code
                 | _    -> Interpreter.Prog.eval prog
 	        )

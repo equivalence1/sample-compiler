@@ -1,0 +1,38 @@
+fun a(x, y, z) begin
+  read(n);
+  i := (x + y) * n;
+  j := i + z;
+
+  l := 0;
+  while (l < 5) do
+    l := l + 1;
+    j := j * l
+  od;
+
+  return j
+end
+
+fun b(a) begin
+  read(x);
+  write(a + x);
+  i := 0;
+
+  while (i < 10) do
+    i := i + 1
+  od;
+
+  return a + x
+end
+
+fun c() begin
+  return 1
+end
+
+var := 123;
+if (a(1, 2, 3) < 100) then
+  b(1)
+elif (a(b(2), 2, 3) < 1000000) then
+  b(2)
+else
+  b(3)
+fi
