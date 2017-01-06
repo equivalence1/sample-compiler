@@ -1,0 +1,35 @@
+class A
+begin
+    A a;
+    int x;
+
+    fun init()
+    begin
+        x := 123
+    end
+
+    fun bar()
+    begin
+        return 123
+    end
+end
+
+
+fun a(int x, int y) begin
+  A a;
+  a := new A(1, 2, new B());
+  a.bar(2, 3);
+  return x + y
+end
+
+fun b(int y) begin
+  y := 5;
+  write(y);
+  return y
+end
+
+x := 2;
+write(b(x));
+aa := 1;
+bb := 2;
+write(a(aa, bb))
