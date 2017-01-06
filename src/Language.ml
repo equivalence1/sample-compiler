@@ -126,17 +126,17 @@ module FunDef =
 module ClassDef =
     struct
 
-        type t = string * ReferenceDef.t list * FunDef.t list
+        type t = string * ReferenceDef.t list * FunDef.t list * string option
 
         ostap (
             parse:
-            %"class" name:IDENT (* TODO extends *)
+            %"class" name:IDENT ext:(-"extends" parent:IDENT)?
             %"begin"
             fields: (!(ReferenceDef.parse) -";")*
             _methods: !(FunDef.parse)*
             %"end"
             {
-                (name, fields, _methods)
+                (name, fields, _methods, ext)
             }
         )
 

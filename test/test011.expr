@@ -1,4 +1,15 @@
-class A
+class B
+begin
+    int b;
+
+    fun foo()
+    begin
+        return 0
+    end
+end
+
+
+class A extends B
 begin
     A a;
     int x;
@@ -8,9 +19,14 @@ begin
         x := 123
     end
 
+    fun foo()
+    begin
+        return x
+    end
+
     fun bar()
     begin
-        return 123
+        return 1
     end
 end
 
@@ -32,4 +48,7 @@ x := 2;
 write(b(x));
 aa := 1;
 bb := 2;
-write(a(aa, bb))
+write(a(aa, bb));
+B b;
+b := new B();
+b.foo()
