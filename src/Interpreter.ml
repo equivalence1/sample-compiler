@@ -118,21 +118,30 @@ module Prog =
             | MCall (obj, m, args) -> Printf.printf "%s.%s(" obj m; List.iter (fun arg -> print_expr arg; Printf.printf ", ") args; Printf.printf ")\n"
 
         let print_fun f =
-            let (name, (params, stmt)) = f in
+            let (name, tp, params, stmt) = f in
+            Printf.printf "fun %s(" name;
+            List.iter (fun (tp, x) -> Printf.printf "%s %s, " tp x) params;
+            Printf.printf "): %s\nbegin\n" tp;
+            print_stmt stmt;
+            Printf.printf "end\n\n"
+        
+        let print_cons c =
+            let (name, params, stmt) = c in
             Printf.printf "%s(" name;
             List.iter (fun (tp, x) -> Printf.printf "%s %s, " tp x) params;
-            Printf.printf ")\nbegin\n";
             print_stmt stmt;
             Printf.printf "end\n\n"
 
         let print_class cls =
-            let (name, fields, methods, ext) = cls in
+            let (name, constructors, fields, methods, ext) = cls in
             Printf.printf "Class %s" name;
             (match ext with
             | Some s -> Printf.printf " extends %s\n" s
             | _      -> Printf.printf "\n");
             Printf.printf "begin\n";
             List.iter (fun (tp, name) -> Printf.printf "    %s %s\n" tp name) fields;
+            Printf.printf "\n";
+            List.iter (fun cons -> print_cons cons) constructors;
             Printf.printf "\n";
             List.iter (fun meth -> print_fun meth) methods;
             Printf.printf "end\n\n\n"

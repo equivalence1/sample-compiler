@@ -104,3 +104,31 @@ module StackMachineEnv =
         let set_var name value (addr, state) = (addr, (name, value)::state)
         let get_var name       (addr, state) = List.assoc name state
     end
+
+module SMCompileEnv =
+    struct
+        open Language
+
+        (*   (variable -> type), (fun name -> fun info = (name, return type, params, stmt)), (class name -> class info = (name, parent, fields, constructros, methods))   *)
+        type t = string StringMap.t 
+                 *                                                      ((string * string * ((string * string) list) * Stmt.t) list) StringMap.t
+                 * (string * string option * ((string * string) list) * ((string * string * ((string * string) list) * Stmt.t) list)) StringMap.t
+
+        let init = (StringMap.empty, StringMap.empty, StringMap.empty)
+        let init2 (a, b, c) = (StringMap.empty, b, c)
+        
+        let add_var name tp    (vars, a, b) = (StringMap.add name tp vars, a, b)
+        let get_var name       (vars, a, b) = 
+            try Some (StringMap.find name vars) with
+            | Not_found -> None
+
+        let add_func name info (a, funcs, b) = (a, StringMap.add name info funcs, b)
+        let get_func name      (a, funcs, b) = StringMap.find name funcs
+
+        let add_class name info (a, b, classes) = 
+            let (cls_name, parent, fields, methods) = info in
+            let new_methods = List.map (fun (name, tp, params, stmt) -> (name, tp, (cls_name, "self")::params, stmt)) methods in
+            (a, b, StringMap.add name (cls_name, parent, fields, new_methods) classes)
+        let get_class name      (a, b, classes) = StringMap.find name classes
+
+    end

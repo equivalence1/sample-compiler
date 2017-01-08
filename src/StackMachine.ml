@@ -13,6 +13,12 @@ type i =
 | S_DROP (* drop 1 element from top of stack *)
 | S_PARAM of string
 
+| S_REF   of string * string
+| S_MCALL of (string * string)
+| S_NEW   of string
+| S_FIELD of (string * string)
+| S_FASSIGN of string * string
+
 module Interpreter =
   struct
 
@@ -103,7 +109,7 @@ module Interpreter =
             run' env_stack stack' code' full_code
 
           | _ -> failwith "run: no matching"
-
+    
     in
     run' [StackMachineEnv.init_env] [] (jump_to_lable "main" code) code
 
@@ -125,6 +131,11 @@ module Interpreter =
           | S_RET                 -> Printf.eprintf "S_RET\n";                       debug_print code'
           | S_DROP                -> Printf.eprintf "S_DROP\n";                      debug_print code'
           | S_PARAM x             -> Printf.eprintf "S_PARAM %s\n" x;                debug_print code'
+          | S_REF (tp, x)         -> Printf.eprintf "S_REF (%s, %s)\n" tp x;         debug_print code'
+          | S_MCALL (t, name)     -> Printf.eprintf "S_MCALL (%s, %s)\n" t name;     debug_print code'
+          | S_NEW name            -> Printf.eprintf "S_NEW %s\n" name;               debug_print code'
+          | S_FIELD (tp, name)    -> Printf.eprintf "S_FIELD (%s, %s)\n" tp name;    debug_print code'
+          | S_FASSIGN (obj, f)    -> Printf.eprintf "S_FASSIGN (%s, %s)\n" obj f;    debug_print code'
 
   end
 
@@ -146,42 +157,131 @@ module Compile =
 
         open Language.Expr
         open Language.Stmt
+        open Utils
 
-        let rec compile_expr = function
-        | Var   x -> [S_LD   x]
-        | Const n -> [S_PUSH n]
+
+        let find_method_type' meth methods =
+            let fil_meths = List.filter (fun (name, _, _, _) -> name = meth) methods in
+            match fil_meths with
+            | [] -> None
+            | (_, t, _, _)::rest -> Some t
+
+        let rec find_method_type meth cls_name env =
+            let (_, parent, _, methods) = SMCompileEnv.get_class cls_name env in
+            let mt = find_method_type' meth methods in
+            match mt with
+            | None ->
+                (match parent with
+                 | None -> failwith (Printf.sprintf "method %s not found" meth)
+                 | Some p -> find_method_type meth p env)
+            | Some t -> t
+
+
+        let find_field_type' field fields =
+            let fil_fields = List.filter (fun (tp, name) -> name = field) fields in
+            match fil_fields with
+            | [] -> None
+            | (tp, name)::rest -> Some tp
+
+        let rec find_field_type field cls_name env = 
+            let (_, parent, fields, _) = SMCompileEnv.get_class cls_name env in
+            let ft = find_field_type' field fields in
+            match ft with
+            | None ->
+                (match parent with
+                 | None -> failwith (Printf.sprintf "field %s not found" field)
+                 | Some p -> find_field_type field p env)
+            | Some t -> t
+
+
+
+        let rec compile_expr env = 
+            let compile_arg env code arg = code @ (snd @@ compile_expr env arg) in
+        function
+        | Var   x -> 
+            (match SMCompileEnv.get_var x env with
+            | Some s -> (s, [S_LD   x])
+            | None -> failwith (Printf.sprintf "variable %s is not yet defined" x))
+        | Const n -> ("int", [S_PUSH n])
         | BinOp (op, l, r) ->
-            let l' = compile_expr l in
-            let r' = compile_expr r in
-                l' @ r' @ [S_BINOP op]
+            let (l_type, l_code) = compile_expr env l in
+            let (r_type, r_code) = compile_expr env r in
+                (match (l_type, r_type) with
+                | ("int", "int") -> ("int", l_code @ r_code @ [S_BINOP op])
+                | _ -> failwith "Can't perform binop on non-ints")
         | Call (name, args) ->
+            let (fun_name, fun_type, fun_params, _) = SMCompileEnv.get_func name env in
             let args' = List.rev args in
-            let compile_arg code arg = code @ (compile_expr arg) in
-            (List.fold_left compile_arg [] args') @ [S_CALL name] (* f (a, b) -> [a, b] *)
-        | _ -> failwith "compile_expr: no matching"             (*                 ^ stack top *)
+            (fun_type, (List.fold_left (compile_arg env) [] args') @ [S_CALL name])
+        | MCall (obj, meth, args) ->
+            let (tp, code') = compile_expr env obj in
+            let m_type = find_method_type meth tp env in
+            let args' = List.rev args in
+            (m_type, (List.fold_left (compile_arg env) [] args')
+                     @ code'
+                     @ [S_MCALL (tp, meth)])
+        | Field (obj, f) ->
+            let (tp, code') = compile_expr env obj in
+            let f_type = find_field_type f tp env in
+            (f_type, code' @ [S_FIELD (tp, f)])
+        | New (cls_name, args) ->
+            let args' = List.rev args in
+            (cls_name, (List.fold_left (compile_arg env) [] args') @ [S_NEW cls_name])
+        | _ -> failwith "compile_expr: no matching"             
 
-        let rec stmt' labler = function
-        | Skip          -> []
-        | Assign (x, e) -> compile_expr e @ [S_ST x]
-        | Read    x     -> [S_READ; S_ST x]
-        | Write   e     -> compile_expr e @ [S_WRITE]
-        | Seq    (l, r) -> stmt' labler l @ stmt' labler r
+
+        let rec stmt' labler env = function
+        | Skip          -> (env, [])
+        | Assign (x, e) -> 
+            (match SMCompileEnv.get_var x env with
+                | Some s -> (env, (snd @@ compile_expr env e) @ [S_ST x])
+            | None -> failwith (Printf.sprintf "variable %s is not yet defined" x))
+        | Read    x     ->
+            (match SMCompileEnv.get_var x env with
+            | Some s ->
+                if (s = "int")
+                then (env, [S_READ; S_ST x])
+                else failwith (Printf.sprintf "variable %s should be int" x)
+            | None -> failwith (Printf.sprintf "variable %s is not yet defined" x))
+        | Write   e     -> (env, (snd @@ compile_expr env e) @ [S_WRITE])
+        | Seq    (l, r) -> 
+            let (env' , code')  = stmt' labler env  l in
+            let (env'', code'') = stmt' labler env' r in
+            (env'', code' @ code'')
         | If (e, s1, s2) -> 
             let cur_if_number = labler#next_if_lable in
             let l1            = "else_" ^ cur_if_number in
-            let l2            = "fi_"          ^ cur_if_number in 
-                compile_expr e @ [S_JMPC ("e", l1)] @ stmt' labler s1 @ [S_JMP l2; S_LABLE l1] @ stmt' labler s2 @ [S_LABLE l2]
+            let l2            = "fi_"   ^ cur_if_number in 
+            (env,   snd (compile_expr env e)
+                  @ [S_JMPC ("e", l1)]
+                  @ snd (stmt' labler env s1)
+                  @ [S_JMP l2; S_LABLE l1]
+                  @ snd (stmt' labler env s2)
+                  @ [S_LABLE l2])
         | While (e, s1) -> 
             let cur_while_number = labler#next_while_lable in
             let l1               = "start_while_" ^ cur_while_number in
             let l2               = "end_while_"   ^ cur_while_number in 
-            [S_LABLE l1] @ compile_expr e @ [S_JMPC ("e", l2)] @ stmt' labler s1 @ [S_JMP l1; S_LABLE l2]
+            (env,   [S_LABLE l1]
+                  @ snd (compile_expr env e)
+                  @ [S_JMPC ("e", l2)]
+                  @ snd (stmt' labler env s1)
+                  @ [S_JMP l1; S_LABLE l2])
         | Call (name, args) ->
-            (compile_expr (Call (name, args))) @ [S_DROP]
+            (env, snd (compile_expr env (Call (name, args))) @ [S_DROP])
         | Return e ->
-            (compile_expr e) @ [S_RET]
-        
-        let stmt = stmt' (new labler)
+            (env, snd (compile_expr env e) @ [S_RET])
+        | Ref (tp, x) ->
+            (SMCompileEnv.add_var x tp env, [S_REF (tp, x)])
+        | MCall (a, b, c) ->
+            (env, snd (compile_expr env (MCall (a, b, c))) @ [S_DROP])
+        | FieldAssign (obj, f, e) -> 
+            (match SMCompileEnv.get_var obj env with
+            | Some s -> (env, (snd @@ compile_expr env e) @ [S_FASSIGN (obj, f)])
+            | None -> failwith (Printf.sprintf "variable %s is not yet defined" obj))
+
+
+        let stmt env = fun a -> snd @@ stmt' (new labler) env a
 
     end
 
@@ -192,13 +292,27 @@ module Prog =
         open Language.Stmt
         open Utils
 
+
+        let compile_func env code (name, tp, params, stmt) = 
+            let show_params = List.map (fun (tp, x) -> S_PARAM x) params in
+            let env' = List.fold_left (fun env -> fun (tp, x) -> SMCompileEnv.add_var x tp env) env params in
+            code @ [S_LABLE name] @ show_params @ (Compile.stmt env' stmt)
+
+        let compile_cls env code (cls_name, parent, fields, methods) =
+            List.fold_left (fun code -> fun (name, tp, params, stmt) -> compile_func env code (cls_name ^ "_" ^ name, tp, (cls_name, "self")::params, stmt)) code methods
+
+        let compile' prog env =
+            let (classes, funcs, main) = prog in
+              (List.fold_left (compile_cls env) [] classes)
+            @ (List.fold_left (compile_func env) [] funcs)
+            @ [S_LABLE "main"]
+            @ (Compile.stmt env main)
+
         let compile prog =
-            match prog with
-            | (funcs, main) ->
-                let compile_func code (name, (params, stmt)) = 
-                    let show_params = List.map (fun x -> S_PARAM x) params in
-                    code @ [S_LABLE name] @ show_params @ (Compile.stmt stmt)
-                in
-                (List.fold_left compile_func [] funcs) @ [S_LABLE "main"] @ (Compile.stmt main)
+            let (classes, funcs, main) = prog in
+            let env = SMCompileEnv.init in
+            let env' = List.fold_left (fun env -> fun (cls_name, parent, fields, methods) as cls -> SMCompileEnv.add_class cls_name cls env) env classes in
+            let env'' = List.fold_left (fun env -> fun (f_name, tp, params, stmt) as f -> SMCompileEnv.add_func f_name f env) env' funcs in
+            compile' prog env''
 
     end

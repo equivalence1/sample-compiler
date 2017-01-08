@@ -288,7 +288,7 @@ module Compile =
   end
 
 open Language.Stmt
-
+(* debug 
 let rec print_meta funcs_meta =
     match funcs_meta with
     | [] -> ()
@@ -300,8 +300,8 @@ let rec print_meta funcs_meta =
         List.iter (fun x -> Printf.eprintf "\t%s\n" x) locals;
         Printf.eprintf "\n\n";
         print_meta funcs_meta'
-
-let compile (funcs, main) =
+*)
+let compile (classes, funcs, main) =
     let funcs_meta_info = Utils.Meta.get_meta [] (funcs @ [("main", ([], main))]) in
 
 (* debug
@@ -309,7 +309,7 @@ let compile (funcs, main) =
     print_meta funcs_meta_info;
 *)
 
-    let asm  = Buffer.create 1024 in
+    let asm  = Buffer.create 4096 in
     let (!!) s = Buffer.add_string asm s in
     let (!)  s = !!s; !!"\n" in
   

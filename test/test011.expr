@@ -2,7 +2,12 @@ class B
 begin
     int b;
 
-    fun foo()
+    fun init(int x, int y): B
+    begin
+        skip
+    end
+
+    fun foo(): int
     begin
         return 0
     end
@@ -14,40 +19,49 @@ begin
     A a;
     int x;
 
-    fun init()
+    fun init(): A
     begin
-        x := 123
+        self.x := 15
     end
 
-    fun foo()
+    fun foo(): int
     begin
-        return x
+        return self.x
     end
 
-    fun bar()
+    fun bar(): int
     begin
         return 1
     end
 end
 
 
-fun a(int x, int y) begin
+fun a(int x, int y): int
+begin
   A a;
   a := new A(1, 2, new B());
   a.bar(2, 3);
   return x + y
 end
 
-fun b(int y) begin
+fun b(int y) : int
+begin
   y := 5;
   write(y);
   return y
 end
 
+int x;
 x := 2;
+
 write(b(x));
+
+int aa;
 aa := 1;
+
+int bb;
 bb := 2;
+
 write(a(aa, bb));
 B b;
 b := new B();

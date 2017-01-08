@@ -1,0 +1,22 @@
+class A
+begin
+    fun init(): int
+    begin
+        return 0
+    end
+
+    fun foo(): int
+    begin
+        return 1
+    end
+end
+
+
+fun a(): int
+begin
+  A a;
+  a := new A();
+  write(a.foo())
+end
+
+a()
