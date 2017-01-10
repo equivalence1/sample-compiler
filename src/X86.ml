@@ -1,10 +1,10 @@
-type opnd = R of int | S of int | M of string | L of int | A of opnd | P of opnd | Ps of (int * opnd)
+type opnd = R of int | S of int | M of string | L of int | A of opnd | Ps of (int * opnd)
 
 let x86regs = [|
   "%eax"; 
   "%edx"; 
-  "%ebx"; 
   "%ecx"; 
+  "%ebx"; 
   "%esi"; 
   "%edi"
 |]
@@ -79,7 +79,6 @@ module Show =
       | M x -> x
       | L i -> Printf.sprintf "$%d" i
       | A opnd -> Printf.sprintf "(%s)" (slot opnd)
-      | P opnd -> Printf.sprintf "*%s" (slot opnd)
       | Ps (n, opnd) -> Printf.sprintf "%d(%s)" (n * word_size) (slot opnd)
 
     let instr = function
@@ -307,7 +306,7 @@ module Compile =
             let (stack_after_vtable, code'') = compile_intern (s_vtable_size::stack_after_layout) ([S_CALL (1, "malloc")]) in (* allocation object vtable *)
             let vtable_pointer::stack'' = stack_after_vtable in
 
-            let connect_obj_vtable = [X86Mov (obj_pointer, eax); X86Mov (vtable_pointer, A eax)] in
+            let connect_obj_vtable = [X86Mov (obj_pointer, eax); X86Mov (vtable_pointer, edx); X86Mov (edx, A eax)] in
 
             let s = allocate env stack' (List.length locals) in
             (s::stack',    [X86Mov (L obj_size, s_obj_size)]

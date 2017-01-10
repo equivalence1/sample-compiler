@@ -4,7 +4,7 @@ begin
 
     fun init()
     begin
-        skip
+        return self
     end
 
     fun foo(): int
@@ -26,7 +26,8 @@ begin
 
     fun init()
     begin
-        self.x := 15
+        self.x := 15;
+        return self
     end
 
     fun foo(): int
