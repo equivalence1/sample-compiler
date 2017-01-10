@@ -58,11 +58,9 @@ end
 
 C c;
 c := new C();
-(*
+
 write(c.faz(5));
 write(c.b.bar(5));
-*)
-write(c.get_b().bar(5))
-(*
-write(c.get_b().a.foo(5))
-*)
+write(c.get_b().bar(5));
+write(c.get_b().a.foo(5));
+write(new C().faz(5))

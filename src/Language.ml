@@ -32,22 +32,6 @@ module Expr =
 
       primary:
         n:DECIMAL {Const n}
-      | %"new" c:IDENT "(" args:!(Util.list0 parse) ")" {
-            New (c, args)
-        }
-(*
-      | obj:IDENT "." m:IDENT args:(-"(" !(Util.list0 parse) -")")? {
-            match args with
-            | None -> Field (Var obj, m)
-            | Some args -> MCall (Var (obj), m, args)
-        }
-      | f:IDENT args:(-"(" !(Util.list0 parse) -")")? {
-          match args with 
-          | None      -> Var f 
-          | Some args -> Call (f, args)
-        }
-      | -"(" parse -")"
-*)
       | chain
       | -"(" parse -")";
 
@@ -58,7 +42,11 @@ module Expr =
                               calls
           };
 
-      chain_start: f:IDENT args:(-"(" !(Util.list0 parse) -")")?
+      chain_start: 
+        %"new" c:IDENT "(" args:!(Util.list0 parse) ")" {
+            New (c, args)
+        }
+      |f:IDENT args:(-"(" !(Util.list0 parse) -")")?
           {
               match args with 
               | None      -> Var f 
