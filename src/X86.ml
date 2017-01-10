@@ -302,12 +302,10 @@ module Compile =
             let s_obj_size = allocate env stack (List.length locals) in
             let (stack_after_layout, code') = compile_intern (s_obj_size::stack) ([S_CALL (1, "malloc")]) in (* allocating object layout *)
             let obj_pointer::stack' = stack_after_layout in
-            Printf.eprintf "slot for obj_pointer is %s\n" (Show.slot obj_pointer);
 
             let s_vtable_size = allocate env stack_after_layout (List.length locals) in
             let (stack_after_vtable, code'') = compile_intern (s_vtable_size::stack_after_layout) ([S_CALL (1, "malloc")]) in (* allocation object vtable *)
             let vtable_pointer::stack'' = stack_after_vtable in
-            Printf.eprintf "slot for vtable is %s\n" (Show.slot vtable_pointer);
 
             let connect_obj_vtable = [X86Mov (obj_pointer, eax); X86Mov (vtable_pointer, A eax)] in
 
@@ -335,6 +333,18 @@ module Compile =
             let addr_to_eax = [X86Mov (obj, eax); X86Mov (A eax, eax); X86Mov (Ps (meth_id, eax), eax);] in
             let (stack', calling_code) = compile_intern stack ([S_CALL (n, "*%eax")]) in
             (stack', addr_to_eax @ calling_code)
+
+        | S_FIELD (t, f) ->
+            let obj::stack' = stack in
+            let (_, _, layout) = X86MetaEnv.get_cls_meta t meta_env in
+            let field_id = (get_index f layout) + 1 in (* +1 because of vtable pointer *)
+            (stack, [X86Mov (obj, eax); X86Mov (Ps (field_id, eax), eax); X86Mov (eax, obj)])
+
+        | S_FASSIGN (t, f) ->
+            let obj::value::stack' = stack in
+            let (_, _, layout) = X86MetaEnv.get_cls_meta t meta_env in
+            let field_id = (get_index f layout) + 1 in (* +1 because of vtable pointer *)
+            (stack', [X86Mov (obj, eax); X86Mov (value, edx); X86Mov (edx, Ps (field_id, eax))])
 
         (* skip it, we already have all meta info *)
         | S_PARAM x ->

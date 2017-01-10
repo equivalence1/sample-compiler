@@ -96,7 +96,7 @@ module Meta =
                  | None -> []
                  | Some p -> get_obj_layout p classes)
             in
-            List.fold_left (fun layout -> fun (t, name) -> layout @ [(name, cls_name)]) p_layout fields
+            List.fold_left (fun layout -> fun (t, name) -> layout @ [(cls_name, name)]) p_layout fields
 
 
         (* functions in this module below are for debugging *)

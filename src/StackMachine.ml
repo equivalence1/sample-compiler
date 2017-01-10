@@ -279,7 +279,7 @@ module Compile =
             (env, snd (compile_expr env (MCall (a, b, c))) @ [S_DROP])
         | FieldAssign (obj, f, e) -> 
             (match SMCompileEnv.get_var obj env with
-            | Some s -> (env, (snd @@ compile_expr env e) @ [S_FASSIGN (obj, f)])
+            | Some t -> (env, (snd @@ compile_expr env e) @ [S_LD obj; S_FASSIGN (t, f)])
             | None -> failwith (Printf.sprintf "variable %s is not yet defined" obj))
 
 

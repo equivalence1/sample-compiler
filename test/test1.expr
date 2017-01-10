@@ -2,7 +2,7 @@ class A
 begin
     fun init()
     begin
-        return 0
+        return self
     end
 
     fun foo(): int
@@ -16,7 +16,8 @@ fun a(): int
 begin
   A a;
   a := new A();
-  write(a.foo())
+  write(a.foo());
+  return 0
 end
 
 a()
