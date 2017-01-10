@@ -346,7 +346,7 @@ module Compile =
             (stack', [X86Mov (obj, eax); X86Mov (value, edx); X86Mov (edx, Ps (field_id, eax))])
 
         (* skip it, we already have all meta info *)
-        | S_PARAM x ->
+        | S_PARAM _ ->
             (stack, [])
 
         | S_REF _ ->
@@ -395,8 +395,6 @@ let compile (classes, funcs, main) =
     let one_func_compiler (name, tp, params, stmt) as f = 
         let env = new x86env in
         let sm_func_code = (StackMachine.Prog.compile_func sm_env labler [] f) in
-        Printf.eprintf "\n\nfor function %s\n\n" name;
-        StackMachine.Interpreter.debug_print sm_func_code;
         let func_code = Compile.compile_function env sm_func_code (name, (X86MetaEnv.get_fun_meta name meta_env)) meta_env in
         (name, (func_code, env))
     in

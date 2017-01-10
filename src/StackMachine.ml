@@ -11,7 +11,7 @@ type i =
 | S_CALL  of (int * string)
 | S_RET
 | S_DROP (* drop 1 element from top of stack *)
-| S_PARAM of string
+| S_PARAM of string * string
 
 | S_REF   of string * string
 | S_MCALL of int * string * string
@@ -74,7 +74,7 @@ module Interpreter =
              * we cant use S_ST here, because it is not right in x86.
              * So we need new instruction, which we will treat as S_ST
              * here, but will just skip in x86.*)
-          | S_PARAM x ->
+          | S_PARAM (t, x) ->
             let y::stack' = stack in
             let env' = StackMachineEnv.set_var x y env in
             run' (env'::env_stack') stack' code' full_code
@@ -131,7 +131,7 @@ module Interpreter =
           | S_CALL (n, name)         -> Printf.eprintf "S_CALL (%d, %s)\n" n name;              debug_print code'
           | S_RET                 -> Printf.eprintf "S_RET\n";                       debug_print code'
           | S_DROP                -> Printf.eprintf "S_DROP\n";                      debug_print code'
-          | S_PARAM x             -> Printf.eprintf "S_PARAM %s\n" x;                debug_print code'
+          | S_PARAM (t, x)             -> Printf.eprintf "S_PARAM (%s, %s)\n" t x;                debug_print code'
           | S_REF (tp, x)         -> Printf.eprintf "S_REF (%s, %s)\n" tp x;         debug_print code'
           | S_MCALL (n, t, name)  -> Printf.eprintf "S_MCALL (%d, %s, %s)\n" n t name;          debug_print code'
           | S_NEW name            -> Printf.eprintf "S_NEW %s\n" name;               debug_print code'
@@ -296,12 +296,12 @@ module Prog =
 
 
         let compile_func env labler code (name, tp, params, stmt) = 
-            let show_params = List.map (fun (tp, x) -> S_PARAM x) params in
+            let show_params = List.map (fun (t, x) -> S_PARAM (t, x)) params in
             let env' = List.fold_left (fun env -> fun (tp, x) -> SMCompileEnv.add_var x tp env) env params in
             code @ [S_LABLE name] @ show_params @ (snd @@ Compile.stmt' labler env' stmt)
 
         let compile_const env labler (name, tp, params, stmt) cls_name = 
-            let show_params = List.map (fun (tp, x) -> S_PARAM x) params in
+            let show_params = List.map (fun (t, x) -> S_PARAM (t, x)) params in
             let env' = List.fold_left (fun env -> fun (tp, x) -> SMCompileEnv.add_var x tp env) env params in
             let (_, p, _, _) = SMCompileEnv.get_class cls_name env in
             let p_init_code = 
