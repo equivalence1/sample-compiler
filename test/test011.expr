@@ -30,7 +30,9 @@ end
 
 fun foo_writer(Base x): int
 begin
-    write(x.foo());
+    int y;
+    read(y);
+    write(y + x.foo());
     return 0
 end
 
