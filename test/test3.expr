@@ -1,0 +1,68 @@
+class A
+begin
+
+    fun init()
+    begin
+        return self
+    end
+
+    fun foo(int x): int
+    begin
+        return x
+    end
+
+end
+
+class B
+begin
+
+    A a;
+
+    fun init()
+    begin
+        self.a := new A();
+        return self
+    end
+
+    fun bar(int x): int
+    begin
+        return self.a.foo(x)
+    end
+
+end
+
+
+class C
+begin
+
+    B b;
+
+    fun init()
+    begin
+        self.b := new B();
+        return self
+    end
+
+    fun faz(int x): int
+    begin
+        return self.b.bar(x)
+    end
+
+    fun get_b(): B
+    begin
+        return self.b
+    end
+
+end
+
+
+C c;
+c := new C();
+(*
+write(c.faz(5));
+write(c.b.bar(5));
+*)
+write(c.get_b().bar(5))
+(*
+write(c.get_b().a.foo(5))
+*)

@@ -15,36 +15,55 @@ module Expr =
 
     ostap (
       parse:
-	  !(Ostap.Util.expr 
+    !(Ostap.Util.expr 
              (fun x -> x)
-	     (Array.map (fun (a, s) -> a, 
+       (Array.map (fun (a, s) -> a, 
                          List.map  (fun s -> ostap(- $(s)), (fun x y -> BinOp (s, x, y))) s
                         ) 
               [|                
-		`Lefta, ["!!"];
-		`Lefta, ["&&"];
-		`Nona , ["=="; "!="; "<="; "<"; ">="; ">"];
-		`Lefta, ["+" ; "-"];
-		`Lefta, ["*" ; "/"; "%"];
+    `Lefta, ["!!"];
+    `Lefta, ["&&"];
+    `Nona , ["=="; "!="; "<="; "<"; ">="; ">"];
+    `Lefta, ["+" ; "-"];
+    `Lefta, ["*" ; "/"; "%"];
               |] 
-	     )
-	     primary);
+       )
+       primary);
+
       primary:
         n:DECIMAL {Const n}
       | %"new" c:IDENT "(" args:!(Util.list0 parse) ")" {
             New (c, args)
         }
+(*
       | obj:IDENT "." m:IDENT args:(-"(" !(Util.list0 parse) -")")? {
             match args with
             | None -> Field (Var obj, m)
             | Some args -> MCall (Var (obj), m, args)
         }
       | f:IDENT args:(-"(" !(Util.list0 parse) -")")? {
-	        match args with 
-	        | None      -> Var f 
-	        | Some args -> Call (f, args)
+          match args with 
+          | None      -> Var f 
+          | Some args -> Call (f, args)
         }
       | -"(" parse -")"
+*)
+      | chain
+      | -"(" parse -")";
+
+      chain: start:chain_start calls:( -"." f:IDENT args:(-"(" !(Util.list0 parse) -")")? )*
+          {
+              List.fold_left (fun acc (f, args) -> match args with None -> Field (acc, f) | Some args -> MCall (acc, f, args))
+                              start
+                              calls
+          };
+
+      chain_start: f:IDENT args:(-"(" !(Util.list0 parse) -")")?
+          {
+              match args with 
+              | None      -> Var f 
+              | Some args -> Call (f, args)
+          }
     )
 
   end
@@ -93,21 +112,21 @@ module Stmt =
       | %"skip"                  {Skip}
       | %"return" e:expr         {Return e} 
       | %"if" e:expr 
-	  %"then" the:parse 
+    %"then" the:parse 
           elif:(%"elif" expr %"then" parse)*
-	  els:(%"else" parse)? 
+    els:(%"else" parse)? 
         %"fi" {
           If (e, the, 
-	         List.fold_right 
-		   (fun (e, t) elif -> If (e, t, elif)) 
-		   elif
-		   (match els with None -> Skip | Some s -> s)
+           List.fold_right 
+       (fun (e, t) elif -> If (e, t, elif)) 
+       elif
+       (match els with None -> Skip | Some s -> s)
           )
         }
       | %"while"  e:expr %"do"  body:parse %"od" {While (e, body)}
       | %"repeat" s:parse %"until" e:expr {Seq (s, While (BinOp ("==", e, Const 0) , s))}
       | %"for" i:parse "," c:expr "," s:parse %"do" b:parse %"od" {
-	        Seq (i, While (c, Seq (b, s)))
+          Seq (i, While (c, Seq (b, s)))
         }
     )
 

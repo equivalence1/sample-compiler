@@ -221,7 +221,7 @@ module Compile =
             let args' = List.rev args in
             (m_type, (List.fold_left (compile_arg env) [] args')
                      @ code'
-                     @ [S_MCALL (List.length args, tp, meth)])
+                     @ [S_MCALL ((List.length args) + 1, tp, meth)])
         | Field (obj, f) ->
             let (tp, code') = compile_expr env obj in
             let f_type = find_field_type f tp env in
