@@ -8,15 +8,16 @@ type i =
 | S_JMP   of string
 | S_JMPC  of string * string (* jmpc compares with zero *)
 | S_LABLE of string
-| S_CALL  of string
+| S_CALL  of (int * string)
 | S_RET
 | S_DROP (* drop 1 element from top of stack *)
 | S_PARAM of string
 
 | S_REF   of string * string
-| S_MCALL of (string * string)
+| S_MCALL of int * string * string
 | S_NEW   of string
-| S_FIELD of (string * string)
+| S_INIT_VTABLE of string
+| S_FIELD of string * string
 | S_FASSIGN of string * string
 
 module Interpreter =
@@ -94,7 +95,7 @@ module Interpreter =
             | 0 -> run' env_stack stack' code' full_code
             | _ -> run' env_stack stack' (jump_to_lable l full_code) full_code)
 
-          | S_CALL name ->
+          | S_CALL (n, name) ->
             let (addr', state') = StackMachineEnv.init_env in
             let next_instr_no = (List.length full_code) - (List.length code') in
             let fun_env = (next_instr_no, state') in
@@ -127,13 +128,14 @@ module Interpreter =
           | S_LABLE l             -> Printf.eprintf "S_LABLE %s\n" l;                debug_print code'
           | S_JMP l               -> Printf.eprintf "S_JMP %s\n" l;                  debug_print code'
           | S_JMPC (cmp, l)       -> Printf.eprintf "S_JMPC (%s, %s)\n" cmp l;       debug_print code'
-          | S_CALL (name)         -> Printf.eprintf "S_CALL %s\n" name;              debug_print code'
+          | S_CALL (n, name)         -> Printf.eprintf "S_CALL (%d, %s)\n" n name;              debug_print code'
           | S_RET                 -> Printf.eprintf "S_RET\n";                       debug_print code'
           | S_DROP                -> Printf.eprintf "S_DROP\n";                      debug_print code'
           | S_PARAM x             -> Printf.eprintf "S_PARAM %s\n" x;                debug_print code'
           | S_REF (tp, x)         -> Printf.eprintf "S_REF (%s, %s)\n" tp x;         debug_print code'
-          | S_MCALL (t, name)     -> Printf.eprintf "S_MCALL (%s, %s)\n" t name;     debug_print code'
+          | S_MCALL (n, t, name)  -> Printf.eprintf "S_MCALL (%d, %s, %s)\n" n t name;          debug_print code'
           | S_NEW name            -> Printf.eprintf "S_NEW %s\n" name;               debug_print code'
+          | S_INIT_VTABLE name            -> Printf.eprintf "S_INIT_VTABLE %s\n" name;               debug_print code'
           | S_FIELD (tp, name)    -> Printf.eprintf "S_FIELD (%s, %s)\n" tp name;    debug_print code'
           | S_FASSIGN (obj, f)    -> Printf.eprintf "S_FASSIGN (%s, %s)\n" obj f;    debug_print code'
 
@@ -210,23 +212,23 @@ module Compile =
                 | ("int", "int") -> ("int", l_code @ r_code @ [S_BINOP op])
                 | _ -> failwith "Can't perform binop on non-ints")
         | Call (name, args) ->
-            let (fun_name, fun_type, fun_params, _) = SMCompileEnv.get_func name env in
+            let (_, fun_type, _, _) = SMCompileEnv.get_func name env in
             let args' = List.rev args in
-            (fun_type, (List.fold_left (compile_arg env) [] args') @ [S_CALL name])
+            (fun_type, (List.fold_left (compile_arg env) [] args') @ [S_CALL (List.length args, name)])
         | MCall (obj, meth, args) ->
             let (tp, code') = compile_expr env obj in
             let m_type = find_method_type meth tp env in
             let args' = List.rev args in
             (m_type, (List.fold_left (compile_arg env) [] args')
                      @ code'
-                     @ [S_MCALL (tp, meth)])
+                     @ [S_MCALL (List.length args, tp, meth)])
         | Field (obj, f) ->
             let (tp, code') = compile_expr env obj in
             let f_type = find_field_type f tp env in
             (f_type, code' @ [S_FIELD (tp, f)])
         | New (cls_name, args) ->
             let args' = List.rev args in
-            (cls_name, (List.fold_left (compile_arg env) [] args') @ [S_NEW cls_name])
+            (cls_name, (List.fold_left (compile_arg env) [] args') @ [S_NEW cls_name; S_CALL (1, cls_name ^ "_init")])
         | _ -> failwith "compile_expr: no matching"             
 
 
@@ -234,8 +236,8 @@ module Compile =
         | Skip          -> (env, [])
         | Assign (x, e) -> 
             (match SMCompileEnv.get_var x env with
-                | Some s -> (env, (snd @@ compile_expr env e) @ [S_ST x])
-            | None -> failwith (Printf.sprintf "variable %s is not yet defined" x))
+             | Some s -> (env, (snd @@ compile_expr env e) @ [S_ST x])
+             | None -> failwith (Printf.sprintf "variable %s is not yet defined" x))
         | Read    x     ->
             (match SMCompileEnv.get_var x env with
             | Some s ->
@@ -293,26 +295,54 @@ module Prog =
         open Utils
 
 
-        let compile_func env code (name, tp, params, stmt) = 
+        let compile_func env labler code (name, tp, params, stmt) = 
             let show_params = List.map (fun (tp, x) -> S_PARAM x) params in
             let env' = List.fold_left (fun env -> fun (tp, x) -> SMCompileEnv.add_var x tp env) env params in
-            code @ [S_LABLE name] @ show_params @ (Compile.stmt env' stmt)
+            code @ [S_LABLE name] @ show_params @ (snd @@ Compile.stmt' labler env' stmt)
 
-        let compile_cls env code (cls_name, parent, fields, methods) =
-            List.fold_left (fun code -> fun (name, tp, params, stmt) -> compile_func env code (cls_name ^ "_" ^ name, tp, (cls_name, "self")::params, stmt)) code methods
+        let compile_const env labler (name, tp, params, stmt) cls_name = 
+            let show_params = List.map (fun (tp, x) -> S_PARAM x) params in
+            let env' = List.fold_left (fun env -> fun (tp, x) -> SMCompileEnv.add_var x tp env) env params in
+            let (_, p, _, _) = SMCompileEnv.get_class cls_name env in
+            let p_init_code = 
+                (match p with
+                 | None -> []
+                 | Some s ->         
+                    let env'' = SMCompileEnv.add_func (s^"_init") (s^"_init", s, [(s, "self")], Skip) env' in (* provide current env with stub of parent's *)
+                    (snd @@ Compile.stmt' labler env'' (Call (s^"_init", [Var ("self")]))))
+            in
+              [S_LABLE (cls_name ^ "_" ^ name)] 
+            @ show_params 
+            @ p_init_code
+            @ [S_LD "self"]
+            @ [S_INIT_VTABLE cls_name]
+            @ [S_DROP]
+            @ (snd @@ Compile.stmt' labler env' stmt)
 
-        let compile' prog env =
+        let compile_cls env labler (cls_name, parent, fields, meths) =
+            let const::methods = meths in
+            let code = List.map (fun (name, tp, params, stmt) -> compile_func env labler [] (cls_name ^ "_" ^ name, tp, params, stmt)) methods in
+            let code' = compile_const env labler const cls_name in
+            [code'] @ code
+
+        let compile' prog env labler =
             let (classes, funcs, main) = prog in
-              (List.fold_left (compile_cls env) [] classes)
-            @ (List.fold_left (compile_func env) [] funcs)
+              (List.concat @@ List.concat (List.map (compile_cls env labler) classes))
+            @ (List.fold_left (compile_func env labler) [] funcs)
             @ [S_LABLE "main"]
-            @ (Compile.stmt env main)
+            @ (snd @@ Compile.stmt' labler env main)
+
+        let construct_env (classes, funcs) = 
+            let env = SMCompileEnv.init in
+            let env' = List.fold_left (fun env -> fun (cls_name, _, _, _) as cls -> SMCompileEnv.add_class cls_name cls env) env classes in
+            List.fold_left (fun env -> fun (f_name, _, _, _) as f -> SMCompileEnv.add_func f_name f env) env' funcs
 
         let compile prog =
             let (classes, funcs, main) = prog in
-            let env = SMCompileEnv.init in
-            let env' = List.fold_left (fun env -> fun (cls_name, parent, fields, methods) as cls -> SMCompileEnv.add_class cls_name cls env) env classes in
-            let env'' = List.fold_left (fun env -> fun (f_name, tp, params, stmt) as f -> SMCompileEnv.add_func f_name f env) env' funcs in
-            compile' prog env''
+            List.iter (fun (cls, _, _, _) -> Printf.eprintf "class %s:\n" cls; Meta.print_vtable (Meta.get_vtable cls classes)) classes;
+            List.iter (fun (cls, _, _, _) -> Printf.eprintf "class %s:\n" cls; Meta.print_layout (Meta.get_obj_layout cls classes)) classes;
+            let env = construct_env (classes, funcs) in
+            let labler = new labler in
+            compile' prog env labler
 
     end

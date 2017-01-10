@@ -8,7 +8,7 @@ let parse infile =
        inherit Util.Lexers.ident ["read"  ; "write"; "skip" ; "if"    ; "then";
                                   "elif"  ; "fi"   ; "while"; "do"    ; "od"  ;
                                   "repeat"; "until"; "for"  ; "return"; "fun" ;
-                                  "begin" ; "end"  ; "class"; "new"  ] s
+                                  "begin" ; "end"  ; "class"; "new"   ; "init"] s
        inherit Util.Lexers.decimal s
        inherit Util.Lexers.skip [
 	 Matcher.Skip.whitespaces " \t\n";
@@ -32,9 +32,10 @@ let main = ()
         | `Ok prog -> 
 	        (
                 match mode with
-	            | `X86 -> () (*
+	            | `X86 -> 
                     let basename = Filename.chop_suffix filename ".expr" in 
-	                X86.build prog basename*)
+                    X86.build prog basename;
+                    ()
 	            | `SM  ->
                     let code = StackMachine.Prog.compile prog in
                     StackMachine.Interpreter.debug_print code;

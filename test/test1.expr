@@ -1,6 +1,6 @@
 class A
 begin
-    fun init(): int
+    fun init()
     begin
         return 0
     end

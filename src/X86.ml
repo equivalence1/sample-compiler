@@ -1,10 +1,10 @@
-type opnd = R of int | S of int | M of string | L of int
+type opnd = R of int | S of int | M of string | L of int | A of opnd | P of opnd | Ps of (int * opnd)
 
 let x86regs = [|
   "%eax"; 
   "%edx"; 
-  "%ecx"; 
   "%ebx"; 
+  "%ecx"; 
   "%esi"; 
   "%edi"
 |]
@@ -45,6 +45,7 @@ type x86instr =
   | X86Ret
   | X86Leave
   | X86AddEsp of int
+  | X86Lea    of string * opnd
 
 module StringSet = Set.Make (String)
 
@@ -72,11 +73,14 @@ let allocate env stack n_locals =
 module Show =
   struct
 
-    let slot = function
+    let rec slot = function
       | R i -> x86regs.(i)
       | S i -> Printf.sprintf "%d(%%ebp)" (i * word_size)
       | M x -> x
       | L i -> Printf.sprintf "$%d" i
+      | A opnd -> Printf.sprintf "(%s)" (slot opnd)
+      | P opnd -> Printf.sprintf "*%s" (slot opnd)
+      | Ps (n, opnd) -> Printf.sprintf "%d(%s)" (n * word_size) (slot opnd)
 
     let instr = function
       | X86Add  (s1, s2)   -> Printf.sprintf "\taddl\t%s,\t%s"  (slot s1) (slot s2)
@@ -101,6 +105,7 @@ module Show =
       | X86Cdq             -> "\tcdq"
       | X86Leave           -> "\tleave"
       | X86AddEsp n        -> Printf.sprintf "\taddl\t$%d,\t%%esp" n
+      | X86Lea (s, s1)      -> Printf.sprintf "\tlea\t%s,\t%s" s (slot s1)
 
   end
 
@@ -147,12 +152,13 @@ module Compile =
   struct
 
     open StackMachine
+    open Utils
 
     let get_index x l =
         let rec get_index' s x l =
             match l with
             | [] -> failwith "No such element"
-            | y::l' -> 
+            | (_, y)::l' -> 
                 if x = y
                 then s
                 else get_index' (s + 1) x l'
@@ -160,7 +166,7 @@ module Compile =
         get_index' 0 x l
 
     let contains x l =
-        List.exists (fun y -> y = x) l
+        List.exists (fun (_, y) -> y = x) l
 
     let get_slot x (name, (params, locals)) =
         if contains x params
@@ -170,16 +176,42 @@ module Compile =
             then S (-((get_index x locals) + 1))
             else M x
 
-    let compile_function env code ((name, (params, locals)) as meta) full_meta =
+    let preserve_regs stack = 
+        match stack with
+        | []  -> ([], [])
+        | (R 2)::_ -> ([X86Push ecx],                                                                            [X86Pop ecx])
+        | (R 3)::_ -> ([X86Push ecx; X86Push ebx],                                                   [X86Pop ebx; X86Pop ecx])
+        | (R 4)::_ -> ([X86Push ecx; X86Push ebx; X86Push esi],                          [X86Pop esi; X86Pop ebx; X86Pop ecx])
+        | _::_     -> ([X86Push ecx; X86Push ebx; X86Push esi; X86Push edi], [X86Pop edi; X86Pop esi; X86Pop ebx; X86Pop ecx])
+            
+    let push_args stack n =
+        let rec push_args' push_code stack n =
+            match n with
+            | 0 -> (stack, push_code)
+            | n ->
+                let s::stack' = stack in
+                push_args' ((X86Push s)::push_code) stack' (n - 1)
+        in push_args' [] stack n
+
+    (* @param env -- X86Env which helps us in allocations
+     * @param code -- SM code of this function
+     * @param meta -- meta info about this function
+     * @param meta_env -- meta info about everything
+     *)
+    let compile_function env code ((name, (params, locals)) as meta) meta_env =
       let rec compile stack code =
+        let rec compile_intern stack code =
 	match code with
-	| []       -> []
+    | []       -> ([], [])
 	| i::code' ->
-      let (stack', x86code) =
         match i with
-        | S_READ   -> ([R 2], [X86Call "read"; X86Mov (eax, R 2)])
+        | S_READ   -> 
+            let s = allocate env stack (List.length locals) in
+            (s::stack, [X86Call "read"; X86Mov (eax, s)])
         
-        | S_WRITE  -> ([], [X86Push (R 2); X86Call "write"; X86Pop (R 2)])
+        | S_WRITE  -> 
+            let y::stack' = stack in
+            (stack, [X86Push y; X86Call "write"; X86Pop y])
         
         | S_PUSH n ->
            let s = allocate env stack (List.length locals) in
@@ -235,7 +267,9 @@ module Compile =
            (y::stack', standard_compare x y cmp)
         
         | S_LABLE l       ->
-           (stack, [X86Lbl l])
+            if l <> name (* we print lable of current function in x86 before prologue *)
+            then (stack, [X86Lbl l])
+            else (stack, [])
         
         | S_JMP l         ->
            (stack, [X86Jmp l])
@@ -244,28 +278,11 @@ module Compile =
            let x::stack' = stack in
            (stack', [X86Cmp (L 0, x); X86Jmpc (cmp, l)])
 
-        | S_CALL name ->
-            let push_args stack =
-                let rec push_args' push_code stack params =
-                    match params with
-                    | [] -> (stack, push_code)
-                    | p::params' ->
-                        let s::stack' = stack in
-                        push_args' ((X86Push s)::push_code) stack' params'
-                in push_args' [] stack (fst (List.assoc name full_meta))
-            in
-            let (stack', push_code) = push_args stack in
-            let (preserve_used_args, restore_used_args) = 
-                match stack' with
-                | []  -> ([], [])
-                | (R 2)::_ -> ([X86Push ecx],                                                                            [X86Pop ecx])
-                | (R 3)::_ -> ([X86Push ecx; X86Push ebx],                                                   [X86Pop ebx; X86Pop ecx])
-                | (R 4)::_ -> ([X86Push ecx; X86Push ebx; X86Push esi],                          [X86Pop esi; X86Pop ebx; X86Pop ecx])
-                | _::_     -> ([X86Push ecx; X86Push ebx; X86Push esi; X86Push edi], [X86Pop edi; X86Pop esi; X86Pop ebx; X86Pop ecx])
-            in
+        | S_CALL (n, name) ->
+            let (stack', push_code) = push_args stack n in
+            let (preserve_used_args, restore_used_args) = preserve_regs stack' in
             let s = allocate env stack' (List.length locals) in
-            let add = List.length (fst (List.assoc name full_meta)) in
-            (s::stack', preserve_used_args @ push_code @ [X86Call name; X86Mov (eax, s); X86AddEsp (add * word_size)] @ restore_used_args)
+            (s::stack', preserve_used_args @ push_code @ [X86Call name; X86Mov (eax, s); X86AddEsp (n * word_size)] @ restore_used_args)
 
         | S_RET ->
             let y::stack' = stack in
@@ -277,37 +294,84 @@ module Compile =
             let y::stack' = stack in
             (stack', [])
 
+        | S_NEW t ->
+            let (parent, vtable, obj_layout) = X86MetaEnv.get_cls_meta t meta_env in
+            let obj_size = 4 * ((List.length obj_layout) + 1) in (* +1 for pointer on vtable *)
+            let vtable_size = 4 * (List.length vtable) in
+
+            let s_obj_size = allocate env stack (List.length locals) in
+            let (stack_after_layout, code') = compile_intern (s_obj_size::stack) ([S_CALL (1, "malloc")]) in (* allocating object layout *)
+            let obj_pointer::stack' = stack_after_layout in
+            Printf.eprintf "slot for obj_pointer is %s\n" (Show.slot obj_pointer);
+
+            let s_vtable_size = allocate env stack_after_layout (List.length locals) in
+            let (stack_after_vtable, code'') = compile_intern (s_vtable_size::stack_after_layout) ([S_CALL (1, "malloc")]) in (* allocation object vtable *)
+            let vtable_pointer::stack'' = stack_after_vtable in
+            Printf.eprintf "slot for vtable is %s\n" (Show.slot vtable_pointer);
+
+            let connect_obj_vtable = [X86Mov (obj_pointer, eax); X86Mov (vtable_pointer, A eax)] in
+
+            let s = allocate env stack' (List.length locals) in
+            (s::stack',    [X86Mov (L obj_size, s_obj_size)]
+                         @ code' (* allocating object layout *)
+                         @ [X86Mov (L vtable_size, s_vtable_size)] 
+                         @ code'' (* allocating vtable *)
+                         @ connect_obj_vtable 
+                         @ [X86Mov (eax, s)])
+
+        | S_INIT_VTABLE t ->
+            let obj::stack' = stack in
+            let (_, vtable, _) = X86MetaEnv.get_cls_meta t meta_env in
+            let vp_to_eax = [X86Mov (obj, eax); X86Mov (A eax, eax)] in (* now eax points to the beggining of vtable *)
+            let add_one_row (n, code) (cls_name, meth_name) =
+                (n + 1, code @ [X86Lea (cls_name ^ "_" ^ meth_name, edx); X86Mov (edx, Ps (n, eax))])
+            in
+            (stack, snd @@ List.fold_left add_one_row (0, vp_to_eax) vtable)
+
+        | S_MCALL (n, t, name) ->
+            let obj::stack' = stack in
+            let (_, vtable, _) = X86MetaEnv.get_cls_meta t meta_env in
+            let meth_id = get_index name vtable in
+            let addr_to_eax = [X86Mov (obj, eax); X86Mov (A eax, eax); X86Mov (Ps (meth_id, eax), eax);] in
+            let (stack', calling_code) = compile_intern stack ([S_CALL (n, "*%eax")]) in
+            (stack', addr_to_eax @ calling_code)
+
         (* skip it, we already have all meta info *)
         | S_PARAM x ->
             (stack, [])
-	    in
+
+        | S_REF _ ->
+            (stack, [])
+
+      in (* compile_intern *)
+      match code with
+      | [] -> []
+      | i::code' ->
+        let (stack', x86code) = compile_intern stack code in
 	    x86code @ compile stack' code'
-      in
-      compile [] code
+    in
+    compile [] code
 
   end
 
 open Language.Stmt
-(* debug 
-let rec print_meta funcs_meta =
-    match funcs_meta with
-    | [] -> ()
-    | (name, (params, locals))::funcs_meta' ->
-        Printf.eprintf "<%s>:\n" name;
-        Printf.eprintf "  params:\n";
-        List.iter (fun x -> Printf.eprintf "\t%s\n" x) params;
-        Printf.eprintf "  locals:\n";
-        List.iter (fun x -> Printf.eprintf "\t%s\n" x) locals;
-        Printf.eprintf "\n\n";
-        print_meta funcs_meta'
-*)
-let compile (classes, funcs, main) =
-    let funcs_meta_info = Utils.Meta.get_meta [] (funcs @ [("main", ([], main))]) in
+open Utils
 
-(* debug
-    Printf.eprintf "printing meta data:\n\n";
-    print_meta funcs_meta_info;
-*)
+let compile (classes, funcs, main) =
+    let all_funcs' = [("main", "int", [], main)] @ funcs in
+    let meths_to_funcs cls =
+        let (cls_name, _, _, methods) = cls in
+        List.fold_left (fun funcs -> fun (m_name, a, b, c) -> funcs @ [(cls_name ^ "_" ^ m_name, a, b, c)]) [] methods
+    in
+    let all_funcs = List.fold_left (fun funcs -> fun cls -> funcs @ (meths_to_funcs cls)) all_funcs' classes in (* all functions + main + all methods *)
+
+    let funcs_meta_info = Meta.get_meta [] all_funcs in
+    let classes_meta_info = List.map (fun (name, parent, fields, methods) -> (name, parent, Meta.get_vtable name classes, Meta.get_obj_layout name classes)) classes in
+
+    (* meta_env = funcs_meta_info + classes_meta_info. Just for convinience *)
+    let meta_env = X86MetaEnv.init in
+    let meta_env = List.fold_left (fun env -> fun (name, (params, locals)) -> X86MetaEnv.add_fun_meta name (params, locals) env) meta_env funcs_meta_info in
+    let meta_env = List.fold_left (fun env -> fun (name, parent, vtable, layout) -> X86MetaEnv.add_cls_meta name (parent, vtable, layout) env) meta_env classes_meta_info in
 
     let asm  = Buffer.create 4096 in
     let (!!) s = Buffer.add_string asm s in
@@ -316,14 +380,32 @@ let compile (classes, funcs, main) =
     !"\t.text";
 
 (* get x86 codes for function and main *)
+    let sm_env = StackMachine.Prog.construct_env (classes, funcs) in
     let labler = new StackMachine.labler in
-    let one_func_compiler (name, (params, stmt)) = 
+
+    let one_func_compiler (name, tp, params, stmt) as f = 
         let env = new x86env in
-        let func_code = Compile.compile_function env (StackMachine.Compile.stmt' labler stmt) (name, (List.assoc name funcs_meta_info)) funcs_meta_info in
+        let sm_func_code = (StackMachine.Prog.compile_func sm_env labler [] f) in
+        Printf.eprintf "\n\nfor function %s\n\n" name;
+        StackMachine.Interpreter.debug_print sm_func_code;
+        let func_code = Compile.compile_function env sm_func_code (name, (X86MetaEnv.get_fun_meta name meta_env)) meta_env in
         (name, (func_code, env))
     in
-    let funcs = List.map one_func_compiler funcs in
-    let main = one_func_compiler ("main", ([], main)) in
+    let main::funcs = List.map one_func_compiler all_funcs' in
+
+    let one_cls_compiler cls =
+        let (cls_name, parent, fields, methods) = cls in
+        let sm_methods_codes = (StackMachine.Prog.compile_cls sm_env labler cls) in
+        let one_method_compiler (sm_method_code, (name, _, _, _) as meth) =
+            let env = new x86env in
+            let name = cls_name ^ "_" ^ name in
+            let method_code = Compile.compile_function env sm_method_code (name, (X86MetaEnv.get_fun_meta name meta_env)) meta_env in
+            (name, (method_code, env))
+        in
+        List.map one_method_compiler (List.combine sm_methods_codes methods)
+    in
+    let methods_codes = List.concat @@ List.map one_cls_compiler classes in
+    let funcs = methods_codes @ funcs in
 
 (* create global variables *)
     List.iter (fun x -> !(Printf.sprintf "\t.comm\t%s,\t%d,\t%d" x word_size word_size)) ((snd (snd main))#local_vars);
@@ -368,6 +450,6 @@ let build prog name =
     let outf = open_out (Printf.sprintf "%s.s" name) in
     Printf.fprintf outf "%s" (compile prog);
     close_out outf;
-    match Sys.command (Printf.sprintf "gcc -m32 -o %s $RC_RUNTIME/runtime.o %s.s" name name) with
+    match Sys.command (Printf.sprintf "gcc -g -m32 -o %s $RC_RUNTIME/runtime.o %s.s" name name) with
     | 0 -> ()
     | _ -> failwith "gcc failed with non-zero exit code"

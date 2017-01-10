@@ -47,17 +47,11 @@ module Meta =
         let rec get_meta acc func_list =
             match func_list with
             | [] -> acc
-            | (name, (params, stmt))::func_list' ->
+            | (name, t, params, stmt)::func_list' ->
                 let rec get_locals params locals stmt =
                     match stmt with
-                    | Read x ->
-                        if (not (List.exists (fun y -> y = x) params) && not (List.exists (fun y -> y = x) locals))
-                        then x::locals
-                        else locals
-                    | Assign (x, e) ->
-                        if (not (List.exists (fun y -> y = x) params) && not (List.exists (fun y -> y = x) locals))
-                        then x::locals
-                        else locals
+                    | Ref (t, name) ->
+                        (t, name)::locals
                     | Seq (l, r) ->
                         let locals' = get_locals params locals l in
                          get_locals params locals' r
@@ -71,6 +65,68 @@ module Meta =
                 if name <> "main"
                 then get_meta ((name, (params, get_locals params [] stmt))::acc) func_list'
                 else get_meta ((name, (params, []))::acc) func_list' (* main function has no locals *)
+
+        (* (method name, class name) list *)
+        let rec get_vtable cls_name classes =
+            let (_, parent, _, methods) = List.find (fun (name, _, _, _) -> name = cls_name) classes in
+            let add_method vtable meth =
+                let rec add_method' acc vtable' meth =
+                    match vtable' with
+                    | [] -> acc @ [(cls_name, meth)]
+                    | (cls_name', name)::rest ->
+                        if name = meth
+                        then acc @ [(cls_name, meth)] @ rest
+                        else add_method' (acc @ [(cls_name', name)]) rest meth
+                in
+                add_method' [] vtable meth
+            in
+            let p_table = 
+                (match parent with
+                 | None -> [] 
+                 | Some p -> get_vtable p classes)
+            in
+            List.fold_left (fun vtable -> fun (m_name, _, _, _) -> add_method vtable m_name) p_table methods
+
+
+        (* (field name, class name) list *)
+        let rec get_obj_layout cls_name classes =
+            let (_, parent, fields, _) = List.find (fun (name, _, _, _) -> name = cls_name) classes in
+            let p_layout = 
+                (match parent with
+                 | None -> []
+                 | Some p -> get_obj_layout p classes)
+            in
+            List.fold_left (fun layout -> fun (t, name) -> layout @ [(name, cls_name)]) p_layout fields
+
+
+        (* functions in this module below are for debugging *)
+
+        
+        let rec print_meta funcs_meta =
+            match funcs_meta with
+            | [] -> Printf.eprintf "\n"; ()
+            | (name, (params, locals))::funcs_meta' ->
+                Printf.eprintf "<%s>:\n" name;
+                Printf.eprintf "  params:\n";
+                List.iter (fun (t, x) -> Printf.eprintf "\t(%s, %s)\n" t x) params;
+                Printf.eprintf "  locals:\n";
+                List.iter (fun (t, x) -> Printf.eprintf "\t(%s, %s)\n" t x) locals;
+                Printf.eprintf "\n\n";
+                print_meta funcs_meta'
+
+        let rec print_vtable vtable =
+            Printf.eprintf "vtable:\n";
+            List.iter (fun (name, cls) -> Printf.eprintf "(%s, %s)\n" name cls) vtable;
+            Printf.eprintf "\n";
+            ()
+
+        let rec print_layout layout =
+            Printf.eprintf "layout:\n";
+            Printf.eprintf "(vtable)\n";
+            List.iter (fun (name, cls) -> Printf.eprintf "(%s, %s)\n" name cls) layout;
+            Printf.eprintf "\n";
+            ()
+
 
     end
 
@@ -130,5 +186,20 @@ module SMCompileEnv =
             let new_methods = List.map (fun (name, tp, params, stmt) -> (name, tp, (cls_name, "self")::params, stmt)) methods in
             (a, b, StringMap.add name (cls_name, parent, fields, new_methods) classes)
         let get_class name      (a, b, classes) = StringMap.find name classes
+
+    end
+
+module X86MetaEnv =
+    struct
+            (*    parent         vtable                  objlayout                          params         locals     *)
+        type t = (string * (string * string) list * (string * string) list) StringMap.t * ((string * string) list * (string * string) list) StringMap.t
+
+        let init = (StringMap.empty, StringMap.empty)
+
+        let add_cls_meta name cls_meta (a, b) = (StringMap.add name cls_meta a, b)
+        let get_cls_meta name          (a, b) = StringMap.find name a
+
+        let add_fun_meta name fun_meta (a, b) = (a, StringMap.add name fun_meta b)
+        let get_fun_meta name          (a, b) = StringMap.find name b
 
     end

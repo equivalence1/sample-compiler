@@ -1,0 +1,73 @@
+class B
+begin
+    int b;
+
+    fun init()
+    begin
+        skip
+    end
+
+    fun foo(): int
+    begin
+        return 0
+    end
+
+    fun faz(): int
+    begin
+        return 123
+    end
+end
+
+
+class A extends B
+begin
+    A a;
+    int x;
+
+    fun init()
+    begin
+        self.x := 15
+    end
+
+    fun foo(): int
+    begin
+        return self.x
+    end
+
+    fun bar(): int
+    begin
+        return 1
+    end
+end
+
+
+fun a(int x, int y): int
+begin
+  A a;
+  a := new A();
+  a.bar();
+  return x + y
+end
+
+fun b(int y) : int
+begin
+  y := 5;
+  write(y);
+  return y
+end
+
+int x;
+x := 2;
+
+write(b(x));
+
+int aa;
+aa := 1;
+
+int bb;
+bb := 2;
+
+write(a(aa, bb));
+B b;
+b := new B();
+write(b.foo())

@@ -127,6 +127,20 @@ module FunDef =
 
   end
 
+module ConstructorDef =
+  struct
+
+    type t = string * string * ReferenceDef.t list * Stmt.t
+
+    ostap (
+      arg  : !(ReferenceDef.parse);
+      parse: %"fun" %"init" "(" ")" %"begin" body:!(Stmt.parse) %"end" {
+          ("init", "Constructor", [], body)
+      }
+    )
+
+  end
+
 module ClassDef =
     struct
 
@@ -137,10 +151,15 @@ module ClassDef =
             %"class" name:IDENT ext:(-"extends" parent:IDENT)?
             %"begin"
             fields: (!(ReferenceDef.parse) -";")*
+            constructor: (!(ConstructorDef.parse))?
             _methods: !(FunDef.parse)*
             %"end"
             {
-                (name, ext, fields, _methods)
+                match constructor with
+                | None -> failwith (Printf.sprintf "class %s should have constructor" name)
+                | Some c -> 
+                    let methods = List.map (fun (f_name, tp, args, body) -> (f_name, tp, (name, "self")::args, body)) (c::_methods) in
+                    (name, ext, fields, methods)
             }
         )
 
