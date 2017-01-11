@@ -32,6 +32,7 @@ module Expr =
 
       primary:
         n:DECIMAL {Const n}
+      | %"NULL" {Const 0}
       | chain
       | -"(" parse -")";
 

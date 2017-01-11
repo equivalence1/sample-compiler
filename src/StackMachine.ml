@@ -57,6 +57,14 @@ module Interpreter =
             | _ ->
                 collect_classes_meta code' meta_env
 
+    let bin_op op o_l o_r =
+        match (o_l, o_r) with
+        | (Int l, Int r) -> perform_op op l r
+        | (_, _) ->
+            if op = "!="
+            then 1
+            else 0
+
     let run code =
       let rec run' env_stack stack code full_code meta_env =
         let env::env_stack' = env_stack in
@@ -94,8 +102,8 @@ module Interpreter =
             run' (env'::env_stack') stack' code' full_code meta_env
 
           | S_BINOP op ->
-            let (Int r)::(Int l)::stack' = stack in
-            run' env_stack ((Int (perform_op op l r))::stack') code' full_code meta_env
+            let o_r::o_l::stack' = stack in
+            run' env_stack ((Int (bin_op op o_l o_r))::stack') code' full_code meta_env
 
           | S_LABLE l ->
             run' env_stack stack code' full_code meta_env
@@ -257,9 +265,7 @@ module Compile =
         | BinOp (op, l, r) ->
             let (l_type, l_code) = compile_expr env l in
             let (r_type, r_code) = compile_expr env r in
-                (match (l_type, r_type) with
-                | ("int", "int") -> ("int", l_code @ r_code @ [S_BINOP op])
-                | _ -> failwith "Can't perform binop on non-ints")
+                ("int", l_code @ r_code @ [S_BINOP op])
         | Call (name, args) ->
             let (_, fun_type, _, _) = SMCompileEnv.get_func name env in
             let args' = List.rev args in

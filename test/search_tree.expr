@@ -1,0 +1,117 @@
+class Node
+begin
+
+    int val;
+    Node left;
+    Node right;
+
+    fun init()
+    begin
+        self.val := 0;
+        self.left := NULL;
+        self.right := NULL;
+        return self
+    end
+
+    fun set_val(int val): int
+    begin
+        self.val := val;
+        return self.val
+    end
+
+    fun print(): int
+    begin
+        if (self.left != NULL)
+        then
+            self.left.print()
+        fi;
+        self.print_node();
+        if (self.right != NULL)
+        then
+            self.right.print()
+        fi;
+        return 0
+    end
+
+    fun print_node(): int
+    begin
+        write(self.val);
+        return 0
+    end
+
+    fun add_value(int val): Node
+    begin
+        if (self.val < val)
+        then
+            if (self.right != NULL)
+            then
+                return self.right.add_value(val)
+            else
+                self.right := new Node();
+                self.right.set_val(val);
+                return self.right
+            fi
+        else
+            if (self.left != NULL)
+            then
+                return self.left.add_value(val)
+            else
+                self.left := new Node();
+                self.left.set_val(val);
+                return self.left
+            fi
+        fi
+    end
+
+end
+
+class Tree
+begin
+
+    Node root;
+
+    fun init()
+    begin
+        self.root := NULL;
+        return self
+    end
+
+    fun add_value(int val): Tree
+    begin
+        if (self.root == NULL)
+        then
+            self.root := new Node();
+            self.root.set_val(val);
+            return self
+        fi;
+        self.root.add_value(val);
+        return self
+    end
+
+    fun print_tree(): int
+    begin
+        if (self.root == NULL)
+        then
+            write(0);
+            return 0
+        fi;
+
+        return self.root.print()
+    end
+
+end
+
+int n;
+read(n);
+Tree t;
+t := new Tree();
+
+int i;
+for i := 0, i < n, i := i + 1
+do
+    int x;
+    read(x);
+    t.add_value(x)
+od;
+
+t.print_tree()
