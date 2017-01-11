@@ -39,34 +39,33 @@ module Operation =
 
   end
 
+module StringMap = Map.Make (String)
+module StringSet = Set.Make (String)
+
 module Meta =
     struct
 
         open Language.Stmt
-        
-        let rec get_meta acc func_list =
-            match func_list with
-            | [] -> acc
-            | (name, t, params, stmt)::func_list' ->
-                let rec get_locals params locals stmt =
-                    match stmt with
-                    | Ref (t, name) ->
-                        (t, name)::locals
-                    | Seq (l, r) ->
-                        let locals' = get_locals params locals l in
-                         get_locals params locals' r
-                    | If (e, s1, s2) ->
-                        let locals' = get_locals params locals s1 in
-                        get_locals params locals' s2
-                    | While (e, s) ->
-                        get_locals params locals s
-                    | _ -> locals
-                in
-                if name <> "main"
-                then get_meta ((name, (params, get_locals params [] stmt))::acc) func_list'
-                else get_meta ((name, (params, []))::acc) func_list' (* main function has no locals *)
 
-        (* (method name, class name) list *)
+        let rec get_func_meta func =
+            let (name, t, params, stmt) = func in
+            let rec get_locals locals stmt =
+                match stmt with
+                | Ref (t, name) ->
+                    (t, name)::locals
+                | Seq (l, r) ->
+                    let locals' = get_locals locals l in
+                    get_locals locals' r
+                | If (e, s1, s2) ->
+                    let locals' = get_locals locals s1 in
+                    get_locals locals' s2
+                | While (e, s) ->
+                    get_locals locals s
+                | _ -> locals
+            in
+            (name, (params, get_locals [] stmt))
+
+        (* (class name, method name) list *)
         let rec get_vtable cls_name classes =
             let (_, parent, _, methods) = List.find (fun (name, _, _, _) -> name = cls_name) classes in
             let add_method vtable meth =
@@ -85,10 +84,9 @@ module Meta =
                  | None -> [] 
                  | Some p -> get_vtable p classes)
             in
-            List.fold_left (fun vtable -> fun (m_name, _, _, _) -> add_method vtable m_name) p_table methods
+            List.fold_left (fun vtable -> fun (m_name, _, _) -> add_method vtable m_name) p_table methods
 
-
-        (* (field name, class name) list *)
+        (* (class name, field name) list *)
         let rec get_obj_layout cls_name classes =
             let (_, parent, fields, _) = List.find (fun (name, _, _, _) -> name = cls_name) classes in
             let p_layout = 
@@ -97,6 +95,14 @@ module Meta =
                  | Some p -> get_obj_layout p classes)
             in
             List.fold_left (fun layout -> fun (t, name) -> layout @ [(cls_name, name)]) p_layout fields
+
+        let fill_in_vtable obj cls_name classes =
+            let vtable = get_vtable cls_name classes in
+            let (fields, methods) = obj in
+            (fields, List.fold_left (fun methods -> fun (cls, meth) -> StringMap.add meth cls methods) methods vtable)
+
+        let get_meth_full_name (_, methods) name =
+            (StringMap.find name methods) ^ "_" ^ name
 
 
         (* functions in this module below are for debugging *)
@@ -130,9 +136,6 @@ module Meta =
 
     end
 
-module StringMap = Map.Make (String)
-module StringSet = Set.Make (String)
-
 module InterpreterEnv =
     struct
         (* Map of functions: f(args, cur_env) -> (result, new_env), state *)
@@ -147,18 +150,41 @@ module InterpreterEnv =
         let get_var name       (fmap, state) = List.assoc name state
     end
 
+module ClassMetaEnv =
+    struct
+
+        type t = (string option * (string * string) list * (string * string * ((string * string) list)) list) StringMap.t
+
+        let init = StringMap.empty
+
+        let add_cls (name, parent, fields, methods) env = StringMap.add name (parent, fields, methods) env
+        let get_all_classes env =
+            let classes = StringMap.bindings env in
+            List.map (fun (name, (p, fields, methods)) -> (name, p, fields, methods)) classes
+
+        let get_cls_meta name env =
+            let all_classes = get_all_classes env in
+            let (parent, _, _) = StringMap.find name env in
+            (parent, Meta.get_vtable name all_classes, Meta.get_obj_layout name all_classes)
+
+    end
+
 module StackMachineEnv =
     struct
         (* return address, state *)
-        type t = int * (string * int) list
+        type value =
+        | Int of int
+        | Object of value StringMap.t * string StringMap.t
 
-        let init_env = (0, [])
+        type t = int * value StringMap.t
+
+        let init_env = (0, StringMap.empty)
 
         let set_ret addr (_, state) = (addr, state)
-        let get_ret (addr, state)   = addr
+        let get_ret   (addr, state) = addr
 
-        let set_var name value (addr, state) = (addr, (name, value)::state)
-        let get_var name       (addr, state) = List.assoc name state
+        let set_var name value (addr, state) = (addr, StringMap.add name value state)
+        let get_var name       (addr, state) = StringMap.find name state
     end
 
 module SMCompileEnv =
@@ -191,7 +217,7 @@ module SMCompileEnv =
 
 module X86MetaEnv =
     struct
-            (*    parent         vtable                  objlayout                          params         locals     *)
+            (*    parent         vtable                  objlayout                              params                   locals     *)
         type t = (string * (string * string) list * (string * string) list) StringMap.t * ((string * string) list * (string * string) list) StringMap.t
 
         let init = (StringMap.empty, StringMap.empty)

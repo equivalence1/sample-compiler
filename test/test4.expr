@@ -1,0 +1,45 @@
+class Base
+begin
+    int x;
+
+    fun init()
+    begin
+        self.x := 1;
+        return self
+    end
+
+    fun foo(): int
+    begin
+        return self.x
+    end
+end
+
+class A extends Base
+begin
+    fun init()
+    begin
+        self.x := 2;
+        return self
+    end
+
+    fun foo(): int
+    begin
+        return self.x
+    end
+end
+
+fun foo_writer(Base x): int
+begin
+    int y;
+    read(y);
+    write(y + x.foo());
+    return 0
+end
+
+Base x;
+
+x := new Base();
+foo_writer(x);
+
+x := new A();
+foo_writer(x)

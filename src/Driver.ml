@@ -38,8 +38,9 @@ let main = ()
                     ()
 	            | `SM  ->
                     let code = StackMachine.Prog.compile prog in
-                    StackMachine.Interpreter.debug_print code;
-                    () (*StackMachine.Interpreter.run code*)
+                    (*StackMachine.Interpreter.debug_print code;*)
+                    StackMachine.Interpreter.run code;
+                    ()
                 | _    -> ()(*Interpreter.Prog.eval prog
                         Interpreter.Prog.print prog; ()*)
 	        )

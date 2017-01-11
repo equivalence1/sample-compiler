@@ -69,6 +69,7 @@ int bb;
 bb := 2;
 
 write(a(aa, bb));
+
 B obj_b;
 obj_b := new B();
 write(obj_b.foo())

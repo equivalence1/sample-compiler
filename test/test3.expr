@@ -53,12 +53,21 @@ begin
         return self.b
     end
 
+    fun ord(int x, int y, int z): int
+    begin
+        write(x);
+        write(y);
+        write(z);
+        return 0
+    end
+
 end
 
 
 C c;
 c := new C();
 
+c.faz(5);
 write(c.faz(5));
 write(c.b.bar(5));
 write(c.get_b().bar(5));

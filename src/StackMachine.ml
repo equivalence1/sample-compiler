@@ -11,7 +11,13 @@ type i =
 | S_CALL  of (int * string)
 | S_RET
 | S_DROP (* drop 1 element from top of stack *)
-| S_PARAM of string * string
+
+(* meta info *)
+        (*     name        parent              fields                             methods    *)
+| S_CLASS of (string * string option * (string * string) list * (string * string * ((string * string) list)) list)
+        (*  name          params                   locals  *)
+| S_FUN of string * (string * string) list * (string * string) list
+| S_FUN_END
 
 | S_REF   of string * string
 | S_MCALL of int * string * string
@@ -25,13 +31,14 @@ module Interpreter =
 
     open Utils.Operation
     open Utils
+    open Utils.StackMachineEnv
 
     let rec jump_to_lable l code =
         match code with
         | [] -> failwith (Printf.sprintf "No lable '%s' was found, cant perform jump." l)
         | (S_LABLE l1)::code' ->
             if l1 = l
-            then code'
+            then (S_LABLE l1)::code'
             else jump_to_lable l code'
         | i::code' -> jump_to_lable l code'
 
@@ -40,8 +47,18 @@ module Interpreter =
         then code
         else go_to_insruction_no (num - 1) (List.tl code)
 
+    let rec collect_classes_meta code meta_env =
+        match code with
+        | [] -> meta_env
+        | i::code' ->
+            match i with
+            | S_CLASS cls ->
+                collect_classes_meta code' (ClassMetaEnv.add_cls cls meta_env)
+            | _ ->
+                collect_classes_meta code' meta_env
+
     let run code =
-      let rec run' env_stack stack code full_code =
+      let rec run' env_stack stack code full_code meta_env =
         let env::env_stack' = env_stack in
     	match code with
     	| []       -> ()
@@ -50,69 +67,99 @@ module Interpreter =
           | S_READ ->
             Printf.printf "> ";
             let x = read_int() in
-            run' env_stack (x::stack) code' full_code
+            run' env_stack ((Int x)::stack) code' full_code meta_env
 
           | S_WRITE ->
-            let y::stack' = stack in
-            Printf.printf "%d\n" y;
-            run' env_stack stack' code' full_code
+            (match stack with
+            | [] -> failwith "nothing to print"
+            | (Object (_, _))::_ -> failwith "can not print object"
+            | (Int y)::stack' ->
+                Printf.printf "%d\n" y;
+                run' env_stack stack' code' full_code meta_env)
 
           | S_PUSH n ->
-            run' env_stack (n::stack) code' full_code
+            run' env_stack ((Int n)::stack) code' full_code meta_env
 
           | S_LD x ->
             let value = StackMachineEnv.get_var x env in
-            run' env_stack (value::stack) code' full_code
+            run' env_stack (value::stack) code' full_code meta_env
           
           | S_ST x ->
             let y::stack' = stack in
             let env' = StackMachineEnv.set_var x y env in
-            run' (env'::env_stack') stack' code' full_code
+            run' (env'::env_stack') stack' code' full_code meta_env
 
-            (* same as S_ST here, but will be different in x86
-             *
-             * we cant use S_ST here, because it is not right in x86.
-             * So we need new instruction, which we will treat as S_ST
-             * here, but will just skip in x86.*)
-          | S_PARAM (t, x) ->
-            let y::stack' = stack in
-            let env' = StackMachineEnv.set_var x y env in
-            run' (env'::env_stack') stack' code' full_code
+          | S_FUN (name, params, locals) ->
+            let (env', stack') = List.fold_left (fun (env, y::stack') -> fun (t, x) -> (StackMachineEnv.set_var x y env, stack')) (env, stack) params in
+            run' (env'::env_stack') stack' code' full_code meta_env
 
           | S_BINOP op ->
-            let r::l::stack' = stack in
-            run' env_stack ((perform_op op l r)::stack') code' full_code
+            let (Int r)::(Int l)::stack' = stack in
+            run' env_stack ((Int (perform_op op l r))::stack') code' full_code meta_env
 
-          | S_LABLE l -> 
-            run' env_stack stack code' full_code
+          | S_LABLE l ->
+            run' env_stack stack code' full_code meta_env
 
           | S_JMP l ->
-            run' env_stack stack (jump_to_lable l full_code) full_code
+            run' env_stack stack (jump_to_lable l full_code) full_code meta_env
 
           | S_JMPC (cmp, l) ->
-            (let y::stack' = stack in
+            (let (Int y)::stack' = stack in
             match (perform_op (name_to_cmp cmp) y 0) with
-            | 0 -> run' env_stack stack' code' full_code
-            | _ -> run' env_stack stack' (jump_to_lable l full_code) full_code)
+            | 0 -> run' env_stack stack' code' full_code meta_env
+            | _ -> run' env_stack stack' (jump_to_lable l full_code) full_code meta_env)
 
           | S_CALL (n, name) ->
-            let (addr', state') = StackMachineEnv.init_env in
+            let (_, state') = StackMachineEnv.init_env in
             let next_instr_no = (List.length full_code) - (List.length code') in
             let fun_env = (next_instr_no, state') in
-            run' (fun_env::env_stack) stack (jump_to_lable name full_code) full_code
+            run' (fun_env::env_stack) stack (jump_to_lable name full_code) full_code meta_env
 
           | S_RET ->
             let addr = StackMachineEnv.get_ret env in
-            run' env_stack' stack (go_to_insruction_no addr full_code) full_code
+            run' env_stack' stack (go_to_insruction_no addr full_code) full_code meta_env
 
           | S_DROP ->
             let y::stack' = stack in
-            run' env_stack stack' code' full_code
+            run' env_stack stack' code' full_code meta_env
+
+          | S_REF _ ->
+            run' env_stack stack code' full_code meta_env
+
+          | S_FUN_END ->
+            run' env_stack stack code' full_code meta_env
+
+          | S_NEW t ->
+            let new_obj = Object (StringMap.empty, StringMap.empty) in
+            run' env_stack (new_obj::stack) code' full_code meta_env
+
+          | S_INIT_VTABLE t ->
+            let (Object (fields, methods))::stack' = stack in
+            let known_classes = ClassMetaEnv.get_all_classes meta_env in
+            let (fields, methods) = Meta.fill_in_vtable (fields, methods) t known_classes in
+            run' env_stack ((Object (fields, methods))::stack') code' full_code meta_env
+
+          | S_MCALL (n, t, name) ->
+            let (Object (fields, methods))::stack' = stack in
+            let (_, state') = StackMachineEnv.init_env in
+            let next_instr_no = (List.length full_code) - (List.length code') in
+            let meth_env = (next_instr_no, state') in
+            let full_meth_name = Meta.get_meth_full_name (fields, methods) name in
+            run' (meth_env::env_stack) stack (jump_to_lable full_meth_name full_code) full_code meta_env
+
+          | S_FIELD (t, f) ->
+            let (Object (fields, methdos))::stack' = stack in
+            run' env_stack ((StringMap.find f fields)::stack') code' full_code meta_env
+
+          | S_FASSIGN (t, f) ->
+            let (Object (fields, methods))::value::stack' = stack in
+            let fields = StringMap.add f value fields in
+            run' env_stack ((Object (fields, methods))::stack') code' full_code meta_env
 
           | _ -> failwith "run: no matching"
     
     in
-    run' [StackMachineEnv.init_env] [] (jump_to_lable "main" code) code
+    run' [StackMachineEnv.init_env] [] (jump_to_lable "main" code) code (collect_classes_meta code ClassMetaEnv.init)
 
     let rec debug_print code =
         match code with
@@ -131,13 +178,15 @@ module Interpreter =
           | S_CALL (n, name)         -> Printf.eprintf "S_CALL (%d, %s)\n" n name;              debug_print code'
           | S_RET                 -> Printf.eprintf "S_RET\n";                       debug_print code'
           | S_DROP                -> Printf.eprintf "S_DROP\n";                      debug_print code'
-          | S_PARAM (t, x)             -> Printf.eprintf "S_PARAM (%s, %s)\n" t x;                debug_print code'
           | S_REF (tp, x)         -> Printf.eprintf "S_REF (%s, %s)\n" tp x;         debug_print code'
           | S_MCALL (n, t, name)  -> Printf.eprintf "S_MCALL (%d, %s, %s)\n" n t name;          debug_print code'
           | S_NEW name            -> Printf.eprintf "S_NEW %s\n" name;               debug_print code'
           | S_INIT_VTABLE name            -> Printf.eprintf "S_INIT_VTABLE %s\n" name;               debug_print code'
           | S_FIELD (tp, name)    -> Printf.eprintf "S_FIELD (%s, %s)\n" tp name;    debug_print code'
           | S_FASSIGN (obj, f)    -> Printf.eprintf "S_FASSIGN (%s, %s)\n" obj f;    debug_print code'
+          | S_CLASS (name, _, _, _) -> Printf.eprintf "S_CLASS %s\n" name;           debug_print code'
+          | S_FUN (name, _, locals)      -> Printf.eprintf "S_FUN %s\n" name ;             debug_print code'
+          | S_FUN_END              -> Printf.eprintf "S_FUN_END\n";                  debug_print code'
 
   end
 
@@ -221,7 +270,7 @@ module Compile =
             let args' = List.rev args in
             (m_type, (List.fold_left (compile_arg env) [] args')
                      @ code'
-                     @ [S_MCALL ((List.length args) + 1, tp, meth)])
+                     @ [S_MCALL ((List.length args) + 1, tp, meth)]) (* +1 for self *)
         | Field (obj, f) ->
             let (tp, code') = compile_expr env obj in
             let f_type = find_field_type f tp env in
@@ -279,7 +328,7 @@ module Compile =
             (env, snd (compile_expr env (MCall (a, b, c))) @ [S_DROP])
         | FieldAssign (obj, f, e) -> 
             (match SMCompileEnv.get_var obj env with
-            | Some t -> (env, (snd @@ compile_expr env e) @ [S_LD obj; S_FASSIGN (t, f)])
+            | Some t -> (env, (snd @@ compile_expr env e) @ [S_LD obj; S_FASSIGN (t, f); S_ST obj])
             | None -> failwith (Printf.sprintf "variable %s is not yet defined" obj))
 
 
@@ -295,13 +344,15 @@ module Prog =
         open Utils
 
 
-        let compile_func env labler code (name, tp, params, stmt) = 
-            let show_params = List.map (fun (t, x) -> S_PARAM (t, x)) params in
+        let compile_func env labler code (name, tp, params, stmt) as f = 
+            let (name, (params, locals)) = Meta.get_func_meta f in
+            let show_meta = [S_FUN (name, params, locals)] in
             let env' = List.fold_left (fun env -> fun (tp, x) -> SMCompileEnv.add_var x tp env) env params in
-            code @ [S_LABLE name] @ show_params @ (snd @@ Compile.stmt' labler env' stmt)
+            code @ [S_LABLE name] @ show_meta @ (snd @@ Compile.stmt' labler env' stmt) @ [S_FUN_END]
 
-        let compile_const env labler (name, tp, params, stmt) cls_name = 
-            let show_params = List.map (fun (t, x) -> S_PARAM (t, x)) params in
+        let compile_const env labler ((name, tp, params, stmt) as c) cls_name = 
+            let (name, (params, locals)) = Meta.get_func_meta c in
+            let show_meta = [S_FUN (cls_name ^ "_" ^ name, params, locals)] in
             let env' = List.fold_left (fun env -> fun (tp, x) -> SMCompileEnv.add_var x tp env) env params in
             let (_, p, _, _) = SMCompileEnv.get_class cls_name env in
             let p_init_code = 
@@ -312,25 +363,30 @@ module Prog =
                     (snd @@ Compile.stmt' labler env'' (Call (s^"_init", [Var ("self")]))))
             in
               [S_LABLE (cls_name ^ "_" ^ name)] 
-            @ show_params 
+            @ show_meta
             @ p_init_code
             @ [S_LD "self"]
             @ [S_INIT_VTABLE cls_name]
-            @ [S_DROP]
+            @ [S_ST "self"]
             @ (snd @@ Compile.stmt' labler env' stmt)
+            @ [S_FUN_END]
 
         let compile_cls env labler (cls_name, parent, fields, meths) =
             let const::methods = meths in
             let code = List.map (fun (name, tp, params, stmt) -> compile_func env labler [] (cls_name ^ "_" ^ name, tp, params, stmt)) methods in
             let code' = compile_const env labler const cls_name in
-            [code'] @ code
+            let show_class_meta = [S_CLASS (cls_name, parent, fields, List.map (fun (name, t, params, stmt) -> (name, t, params)) methods)] in
+            show_class_meta @ code' @ (List.concat code)
 
         let compile' prog env labler =
             let (classes, funcs, main) = prog in
-              (List.concat @@ List.concat (List.map (compile_cls env labler) classes))
+            let (_, (_, main_locals)) = Meta.get_func_meta ("main", "", [], main) in
+              (List.concat @@ List.map (compile_cls env labler) classes)
             @ (List.fold_left (compile_func env labler) [] funcs)
             @ [S_LABLE "main"]
+            @ [S_FUN ("main", [], main_locals)]
             @ (snd @@ Compile.stmt' labler env main)
+            @ [S_FUN_END]
 
         let construct_env (classes, funcs) = 
             let env = SMCompileEnv.init in
@@ -339,8 +395,6 @@ module Prog =
 
         let compile prog =
             let (classes, funcs, main) = prog in
-            List.iter (fun (cls, _, _, _) -> Printf.eprintf "class %s:\n" cls; Meta.print_vtable (Meta.get_vtable cls classes)) classes;
-            List.iter (fun (cls, _, _, _) -> Printf.eprintf "class %s:\n" cls; Meta.print_layout (Meta.get_obj_layout cls classes)) classes;
             let env = construct_env (classes, funcs) in
             let labler = new labler in
             compile' prog env labler
