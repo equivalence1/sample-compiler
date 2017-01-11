@@ -81,8 +81,8 @@ module Stmt =
     | Call   of string * Expr.t list
     | Return of Expr.t
     | Ref    of string * string
-    | MCall  of Expr.t * string * Expr.t list
     | FieldAssign of string * string * Expr.t
+    | Expr   of Expr.t
 
     ostap (
       parse: s:simple d:(-";" parse)? {match d with None -> s | Some d -> Seq (s, d)};
@@ -91,10 +91,8 @@ module Stmt =
        obj:IDENT "." x:IDENT ":=" e:expr {FieldAssign (obj, x, e)}
       | x:IDENT ":=" e:expr {Assign (x, e)}
       | f:IDENT "(" args:!(Util.list0 expr) ")" {Call (f, args)}
-      | obj:IDENT "." m:IDENT "(" args:!(Util.list0 Expr.parse) ")" {
-            MCall (Var (obj), m, args)
-        }
       | rf:!(ReferenceDef.parse) {let (a, b) = rf in Ref (a, b)}
+      | e:expr {Expr e} 
       | %"read"  "(" x:IDENT ")" {Read x}
       | %"write" "(" e:expr  ")" {Write e}
       | %"skip"                  {Skip}

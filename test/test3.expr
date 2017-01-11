@@ -11,6 +11,12 @@ begin
         return x
     end
 
+    fun write_x(int x): int
+    begin
+        write(x);
+        return 0
+    end
+
 end
 
 class B
@@ -72,4 +78,7 @@ write(c.faz(5));
 write(c.b.bar(5));
 write(c.get_b().bar(5));
 write(c.get_b().a.foo(5));
-write(new C().faz(5))
+write(new C().faz(5));
+
+c.get_b().a.write_x(123);
+c.get_b().a.write_x(123)

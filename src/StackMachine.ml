@@ -324,8 +324,8 @@ module Compile =
             (env, snd (compile_expr env e) @ [S_RET])
         | Ref (tp, x) ->
             (SMCompileEnv.add_var x tp env, [S_REF (tp, x)])
-        | MCall (a, b, c) ->
-            (env, snd (compile_expr env (MCall (a, b, c))) @ [S_DROP])
+        | Expr e ->
+            (env, snd (compile_expr env e) @ [S_DROP])
         | FieldAssign (obj, f, e) -> 
             (match SMCompileEnv.get_var obj env with
             | Some t -> (env, (snd @@ compile_expr env e) @ [S_LD obj; S_FASSIGN (t, f); S_ST obj])
