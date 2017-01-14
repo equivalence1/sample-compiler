@@ -174,7 +174,7 @@ module StackMachineEnv =
         (* return address, state *)
         type value =
         | Int of int
-        | Object of value StringMap.t * string StringMap.t
+        | Object of (value StringMap.t) ref * string StringMap.t
 
         type t = int * value StringMap.t
 

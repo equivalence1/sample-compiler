@@ -132,13 +132,13 @@ module Interpreter =
             run' env_stack stack' code' full_code meta_env
 
           | S_REF _ ->
-            run' env_stack stack code' full_code meta_env
+                run' env_stack stack code' full_code meta_env
 
           | S_FUN_END ->
             run' env_stack stack code' full_code meta_env
 
           | S_NEW t ->
-            let new_obj = Object (StringMap.empty, StringMap.empty) in
+            let new_obj = Object (ref StringMap.empty, StringMap.empty) in
             run' env_stack (new_obj::stack) code' full_code meta_env
 
           | S_INIT_VTABLE t ->
@@ -157,11 +157,11 @@ module Interpreter =
 
           | S_FIELD (t, f) ->
             let (Object (fields, methdos))::stack' = stack in
-            run' env_stack ((StringMap.find f fields)::stack') code' full_code meta_env
+            run' env_stack ((StringMap.find f !fields)::stack') code' full_code meta_env
 
           | S_FASSIGN (t, f) ->
             let (Object (fields, methods))::value::stack' = stack in
-            let fields = StringMap.add f value fields in
+            fields := StringMap.add f value !fields;
             run' env_stack ((Object (fields, methods))::stack') code' full_code meta_env
 
           | _ -> failwith "run: no matching"
