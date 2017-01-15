@@ -1,8 +1,15 @@
+int s;
+int n;
+int p;
+
 s := 0;
 read (n);
 p := 2;
 
 while n > 0 do
+	int c;
+	int f;
+
     c := 2;
     f := 1;
 

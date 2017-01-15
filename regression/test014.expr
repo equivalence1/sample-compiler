@@ -1,8 +1,12 @@
+int i;
+int s;
+
 i := 0;
 s := 0; 
 
 while i < 100
 do
+	int j;
     j := 0;
 
     while j < 100

@@ -1,3 +1,7 @@
+int n;
+int k;
+int res;
+
 n := 2;
 k := 10;
 res := 1;

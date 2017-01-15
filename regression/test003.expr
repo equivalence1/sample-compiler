@@ -1,3 +1,6 @@
+int x;
+int y;
+
 read (x);
 read (y);
 write (x-y);

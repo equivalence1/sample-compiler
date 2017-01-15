@@ -1,8 +1,12 @@
+int i;
+int s;
+
 i := 0;
 s := 0; 
 
 for i := 0, i < 100, i := i+1
 do
+	int j;
     for j := 0, j < 100, j := j+1
     do   
       s := s + j

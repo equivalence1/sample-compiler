@@ -1,15 +1,18 @@
-fun a(x, y) begin
+fun a(int x, int y): int begin
   return x + y
 end
 
-fun b(y) begin
+fun b(int y): int begin
   y := 5;
   write(y);
   return y
 end
 
+int x;
 x := 2;
 write(b(x));
+int aa;
 aa := 1;
+int bb;
 bb := 2;
 write(a(aa, bb))

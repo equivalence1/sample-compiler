@@ -1,9 +1,15 @@
+int s;
+int n;
+int p;
+
 s := 0;
 read (n);
 p := 2;
 
 while n > 0 do
+	int c;
     c := 2;
+    int f;
     f := 1;
 
     for c := 2, c*c <= p && f, c := c+1

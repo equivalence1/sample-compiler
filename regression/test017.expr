@@ -1,4 +1,10 @@
+int n;
 read (n);
+
+int i;
+int fib_1;
+int fib_2;
+int fib;
 
 i     := 2;
 fib_1 := 1;

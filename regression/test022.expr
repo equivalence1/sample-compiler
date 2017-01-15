@@ -1,9 +1,15 @@
+int n;
 read (n);
+
+int fib_1;
+int fib_2;
+int fib;
 
 fib_1 := 1;
 fib_2 := 1;
 fib   := 1;
 
+int i;
 for i := 2, i < n, i := i+1
 do
       fib   := fib_1 + fib_2;

@@ -1,13 +1,19 @@
+int n;
 read (n);
+
+int c;
+int p;
 
 c := 1;
 p := 2;
 
 while c do
 
+  int cc;
   cc := 1;
 
   while cc do
+    int q;
     q := 2;
 
     while q * q <= p && cc do
@@ -19,8 +25,14 @@ while c do
    
   od;
 
+  int d;
+  int i;
+
   d := p;
   i := 0;
+
+  int q;
+  int m;
 
   q := n / d;
   m := n % d;

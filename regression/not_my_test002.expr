@@ -1,14 +1,14 @@
-fun two() begin
+fun two(): int begin
     return 2;
     return 3
 end
 
-fun write_42() begin
+fun write_42(): int begin
     write(42);
     return 0
 end
 
-fun assert(x) begin
+fun assert(int x): int begin
     if x
         then return 0
     fi;
@@ -17,18 +17,20 @@ fun assert(x) begin
     od
 end
 
-fun set_i(n) begin
+fun set_i(int n): int begin
+    int i;
     i := n;
     return 0
 end
 
-fun useless(x, y, z, res) begin
+fun useless(int x, int y, int z, int res): int begin
     write(1000000000)
 end
 
 write(two()*2);
 write_42();
 assert(0 == 0);
+int i;
 i := 3;
 set_i(100500);
 write(i)

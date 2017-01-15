@@ -1,4 +1,4 @@
-fun fac(n) begin
+fun fac(int n): int begin
     if n < 2
     then
         return 1
@@ -7,7 +7,10 @@ fun fac(n) begin
     fi
 end
 
-fun pow(x, n) begin
+fun pow(int x, int n): int begin
+    int i;
+    int res;
+
     i := 0;
     res := 1;
     while i < n do
@@ -17,7 +20,11 @@ fun pow(x, n) begin
     return res
 end
 
-fun fib(n) begin
+fun fib(int n): int begin
+    int i;
+    int a0;
+    int a1;
+
     i  := 0;
     a0 := 0;
     a1 := 1;

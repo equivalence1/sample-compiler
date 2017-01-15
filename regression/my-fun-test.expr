@@ -1,8 +1,14 @@
-fun a(x, y, z) begin
+fun a(int x, int y, int z): int
+begin
+  int n;
+  int i;
+  int j;
+
   read(n);
   i := (x + y) * n;
   j := i + z;
 
+  int l;
   l := 0;
   while (l < 5) do
     l := l + 1;
@@ -12,7 +18,11 @@ fun a(x, y, z) begin
   return j
 end
 
-fun b(a) begin
+fun b(int a): int
+begin
+  int x;
+  int i;
+
   read(x);
   write(a + x);
   i := 0;
@@ -24,10 +34,11 @@ fun b(a) begin
   return a + x
 end
 
-fun c() begin
+fun c(): int begin
   return 1
 end
 
+int var;
 var := 123;
 if (a(1, 2, 3) < 100) then
   b(1)
