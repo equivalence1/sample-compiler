@@ -138,16 +138,20 @@ module Meta =
 
 module InterpreterEnv =
     struct
-        (* Map of functions: f(args, cur_env) -> (result, new_env), state *)
-        type t = (int list -> t -> int) StringMap.t * (string * int) list
+        type value =
+        | Int of int
+        | Object of (value StringMap.t) ref * string StringMap.t
 
-        let init_env = (StringMap.empty, [])
+        (* Map of functions: f(args, cur_env) -> (result, new_env), state *)
+        type t = (value list -> t -> value) StringMap.t * value StringMap.t
+
+        let init_env = (StringMap.empty, StringMap.empty)
 
         let add_func name f (fmap, state) = (StringMap.add name f fmap, state)
         let get_func name   (fmap, state) = StringMap.find name fmap
 
-        let set_var name value (fmap, state) = (fmap, (name, value)::state)
-        let get_var name       (fmap, state) = List.assoc name state
+        let set_var name value (fmap, state) = (fmap, StringMap.add name value state)
+        let get_var name       (fmap, state) = StringMap.find name state
     end
 
 module ClassMetaEnv =
@@ -212,20 +216,5 @@ module SMCompileEnv =
             let new_methods = List.map (fun (name, tp, params, stmt) -> (name, tp, (cls_name, "self")::params, stmt)) methods in
             (a, b, StringMap.add name (cls_name, parent, fields, new_methods) classes)
         let get_class name      (a, b, classes) = StringMap.find name classes
-
-    end
-
-module X86MetaEnv =
-    struct
-            (*    parent         vtable                  objlayout                              params                   locals     *)
-        type t = (string * (string * string) list * (string * string) list) StringMap.t * ((string * string) list * (string * string) list) StringMap.t
-
-        let init = (StringMap.empty, StringMap.empty)
-
-        let add_cls_meta name cls_meta (a, b) = (StringMap.add name cls_meta a, b)
-        let get_cls_meta name          (a, b) = StringMap.find name a
-
-        let add_fun_meta name fun_meta (a, b) = (a, StringMap.add name fun_meta b)
-        let get_fun_meta name          (a, b) = StringMap.find name b
 
     end

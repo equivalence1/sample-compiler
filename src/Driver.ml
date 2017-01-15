@@ -20,14 +20,16 @@ let parse infile =
     )
     (ostap (!(Language.Unit.parse) -EOF))
 
+exception InvalidFlag
+
 let main = ()
     try
         let mode, filename =
             match Sys.argv.(1) with
+            | "-i" -> `Int, Sys.argv.(2)
             | "-s" -> `SM , Sys.argv.(2)
             | "-o" -> `X86, Sys.argv.(2)
-            | "-i" -> `Int, Sys.argv.(2)
-            | _ -> raise (Invalid_argument "invalid flag")
+            | _ -> raise InvalidFlag
         in
         match parse filename with
         | `Ok prog -> 
@@ -42,12 +44,14 @@ let main = ()
                     (*StackMachine.Interpreter.debug_print code;*)
                     StackMachine.Interpreter.run code;
                     ()
-                | _    -> ()(*Interpreter.Prog.eval prog
-                        Interpreter.Prog.print prog; ()*)
+                | `Int -> 
+                    Interpreter.Prog.eval prog;
+                    ()
 	        )
 
         | `Fail er -> Printf.eprintf "%s\n" er
     with 
-    | Invalid_argument _ ->
+    | InvalidFlag ->
         Printf.printf "Usage: rc.byte <command> <name.expr>\n";
-        Printf.printf "  <command> should be one of: -i, -s, -o\n"
+        Printf.printf "  <command> should be one of: -i, -s, -o\n";
+        Printf.printf "Your's <command> was '%s'\n" Sys.argv.(1)
